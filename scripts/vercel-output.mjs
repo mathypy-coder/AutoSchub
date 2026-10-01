@@ -1,26 +1,45 @@
-// Génère la sortie finale de Vercel (Build Output API v3) dans .vercel/output.
+// Génère la sortie finale de Vercel (Build Output API v3) : site + API + routage.
 // Vercel la déploie telle quelle, sans dépendre des réglages du projet
-// (préréglage de framework, « Output Directory », lecture de vercel.json…).
-// Ne fait rien en dehors d'un build Vercel.
-import { build } from 'esbuild';
-import { cpSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+// (préréglage de framework, « Output Directory », vercel.json ignoré, ou
+// « Root Directory » = client). Ne fait rien en dehors d'un build Vercel.
+import { execSync } from 'node:child_process';
+import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-if (!process.env.VERCEL) {
-  process.exit(0);
+if (!process.env.VERCEL) process.exit(0);
+
+const ROOT = fileURLToPath(new URL('..', import.meta.url));
+// Vercel lit .vercel/output dans le dossier racine du projet, là où le build a été lancé
+// (racine du dépôt, ou client/ si le projet est configuré ainsi).
+const PROJECT_DIR = process.env.INIT_CWD || process.cwd();
+const OUT = join(PROJECT_DIR, '.vercel/output');
+const FUNC = join(OUT, 'functions/api.func');
+
+// Projet Vercel limité à client/ : npm n'a installé que les dépendances du client.
+const fromServer = createRequire(join(ROOT, 'server/package.json'));
+try {
+  fromServer.resolve('express');
+  fromServer.resolve('@libsql/client/web');
+} catch {
+  console.log('Installation des dépendances du serveur…');
+  execSync('npm install --workspaces --include-workspace-root --no-audit --no-fund', { cwd: ROOT, stdio: 'inherit' });
 }
+const { build } = await import('esbuild');
 
-const OUT = '.vercel/output';
-const FUNC = `${OUT}/functions/api.func`;
 rmSync(OUT, { recursive: true, force: true });
 
 // 1. Site statique
-cpSync('client/dist', `${OUT}/static`, { recursive: true });
+const dist = join(ROOT, 'client/dist');
+if (!existsSync(join(dist, 'index.html'))) throw new Error('client/dist introuvable : lance d’abord le build du client.');
+cpSync(dist, join(OUT, 'static'), { recursive: true });
 
 // 2. API Express en une seule fonction, toutes dépendances incluses.
 mkdirSync(FUNC, { recursive: true });
 await build({
-  entryPoints: ['api/index.js'],
-  outfile: `${FUNC}/index.mjs`,
+  entryPoints: [join(ROOT, 'api/index.js')],
+  outfile: join(FUNC, 'index.mjs'),
   bundle: true,
   platform: 'node',
   format: 'esm',
@@ -41,7 +60,7 @@ await build({
   logLevel: 'warning',
 });
 writeFileSync(
-  `${FUNC}/.vc-config.json`,
+  join(FUNC, '.vc-config.json'),
   JSON.stringify(
     {
       runtime: 'nodejs22.x',
@@ -56,9 +75,9 @@ writeFileSync(
   ),
 );
 
-// 3. Routage : API, cache des fichiers, puis application (SPA).
+// 3. Routage : en-têtes, API, fichiers statiques, puis application (SPA).
 writeFileSync(
-  `${OUT}/config.json`,
+  join(OUT, 'config.json'),
   JSON.stringify(
     {
       version: 3,
@@ -82,4 +101,4 @@ writeFileSync(
     2,
   ),
 );
-console.log('Sortie Vercel générée dans .vercel/output (site + API).');
+console.log(`Sortie Vercel générée dans ${OUT} (site + API).`);

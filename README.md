@@ -79,7 +79,8 @@ sinon packs, leçons et inscriptions disparaissent ou n’apparaissent que par m
 
 Le build génère aussi directement la sortie finale de Vercel (`.vercel/output`, « Build Output API » :
 site, fonction API compilée avec esbuild et routage). Le déploiement fonctionne donc même si le projet
-Vercel ignore `vercel.json` ou utilise un autre préréglage (Vite…).
+Vercel ignore `vercel.json`, utilise un autre préréglage (Vite…) ou a `client` comme *Root Directory*.
+Un seul projet Vercel suffit : supprime les doublons pour éviter de te tromper d’adresse.
 
 Réglages du projet : *Root Directory* = racine du dépôt, *Framework Preset* = « Other », Node.js 22.x.
 
