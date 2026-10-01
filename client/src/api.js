@@ -17,8 +17,9 @@ export function setToken(token) {
   }
 }
 
-export async function api(path, { method = 'GET', body } = {}) {
-  const token = getToken();
+// auth: false pour les données publiques, que le CDN peut alors mettre en cache.
+export async function api(path, { method = 'GET', body, auth = true } = {}) {
+  const token = auth ? getToken() : null;
   const res = await fetch(`/api${path}`, {
     method,
     headers: {

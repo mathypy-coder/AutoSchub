@@ -1,0 +1,5 @@
+# Inutile au déploiement : allège l'envoi et le build.
+server/test
+server/data
+*.db
+*.db-*

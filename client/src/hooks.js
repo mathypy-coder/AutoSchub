@@ -23,8 +23,17 @@ export function usePolling(path, intervalMs = 5000) {
   useEffect(() => {
     refresh();
     if (!intervalMs) return undefined;
-    const timer = setInterval(refresh, intervalMs);
-    return () => clearInterval(timer);
+    // Pas de rafraîchissement quand l'onglet est caché : moins d'appels à l'API
+    // (et donc moins d'invocations facturées). Rattrapage immédiat au retour.
+    const tick = () => {
+      if (document.visibilityState === 'visible') refresh();
+    };
+    const timer = setInterval(tick, intervalMs);
+    document.addEventListener('visibilitychange', tick);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', tick);
+    };
   }, [path, intervalMs, refresh]);
 
   return { data, error, refresh };

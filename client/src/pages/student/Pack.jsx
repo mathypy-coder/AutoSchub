@@ -24,8 +24,8 @@ export default function Pack() {
       .catch((err) => setError(err.message));
 
   useEffect(() => {
-    api('/subscriptions/plans').then(setCatalog).catch((err) => setError(err.message));
-    api('/permits').then((d) => setPermits(d.permits)).catch(() => {});
+    api('/subscriptions/plans', { auth: false }).then(setCatalog).catch((err) => setError(err.message));
+    api('/permits', { auth: false }).then((d) => setPermits(d.permits)).catch(() => {});
     load();
   }, []);
 

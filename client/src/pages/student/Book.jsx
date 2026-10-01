@@ -42,8 +42,8 @@ export default function Book() {
   const [selectedId, setSelectedId] = useState(null);
 
   useEffect(() => {
-    api('/permits').then((d) => setPermits(d.permits)).catch(() => {});
-    api('/exam-centers').then((d) => setExamCenters(d.centers)).catch(() => {});
+    api('/permits', { auth: false }).then((d) => setPermits(d.permits)).catch(() => {});
+    api('/exam-centers', { auth: false }).then((d) => setExamCenters(d.centers)).catch(() => {});
   }, []);
 
   const query = new URLSearchParams({
