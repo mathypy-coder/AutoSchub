@@ -31,6 +31,21 @@ function restoreOriginalUrl(req) {
   req.url = `/api/${path.replace(/^\/+/, '')}${url.search}`;
 }
 
+// Cause lisible (sans secret) pour savoir quoi corriger dans les réglages Vercel.
+function describeInitError(err) {
+  const message = String(err?.message ?? err)
+    .replaceAll(process.env.TURSO_AUTH_TOKEN || '\u0000', '***')
+    .slice(0, 200);
+  if (!process.env.TURSO_DATABASE_URL) return `Base locale indisponible : ${message}`;
+  if (/401|403|unauthori[sz]ed|forbidden|jwt|token/i.test(message)) {
+    return `Turso refuse la connexion : vérifie TURSO_AUTH_TOKEN (${message})`;
+  }
+  if (/fetch failed|ENOTFOUND|ECONNREFUSED|404|not found|invalid url|URL_INVALID/i.test(message)) {
+    return `Base Turso introuvable : vérifie TURSO_DATABASE_URL (${message})`;
+  }
+  return `Erreur Turso : ${message}`;
+}
+
 export default async function handler(req, res) {
   restoreOriginalUrl(req);
   ready ??= init().catch((err) => {
@@ -45,6 +60,11 @@ export default async function handler(req, res) {
     res.statusCode = 503;
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.setHeader('Retry-After', '5');
-    res.end(JSON.stringify({ error: 'Service momentanément indisponible, réessaie dans quelques secondes.' }));
+    res.end(
+      JSON.stringify({
+        error: 'Service momentanément indisponible, réessaie dans quelques secondes.',
+        detail: describeInitError(err),
+      }),
+    );
   }
 }

@@ -31,7 +31,7 @@ avec un module de **théorie** intégré.
 
 ## Stack
 
-- `server/` — Node.js 22, Express 5, SQLite via `@libsql/client` (fichier local en dev, Turso en production),
+- `server/` — Node.js 22, Express 5, SQLite intégré à Node (`node:sqlite`) en local, Turso (`@libsql/client/web`) en production,
   auth par jeton signé HMAC + mots de passe scrypt.
 - `client/` — React 19 + Vite, React Router, Leaflet / OpenStreetMap pour la carte.
 

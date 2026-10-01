@@ -1,4 +1,5 @@
 import { mkdirSync } from 'node:fs';
+import { DatabaseSync } from 'node:sqlite';
 import { dirname } from 'node:path';
 
 const SCHEMA = `
@@ -128,26 +129,85 @@ function wrap(executor) {
   };
 }
 
+// Base locale : SQLite intégré à Node (node:sqlite), exposé avec la même interface
+// que le client Turso. Aucun module natif à installer ou à embarquer : fonctionne
+// en dev, dans les tests et sur Vercel (stockage éphémère dans /tmp) sans Turso.
+class LocalClient {
+  constructor(path) {
+    this.sqlite = new DatabaseSync(path);
+    this.sqlite.exec('PRAGMA foreign_keys = ON;');
+    this.lock = Promise.resolve();
+  }
+
+  async execute({ sql, args = [] }) {
+    const stmt = this.sqlite.prepare(sql);
+    if (/^\s*(select|pragma|with)\b/i.test(sql) || /\breturning\b/i.test(sql)) {
+      const objects = stmt.all(...args);
+      const columns = objects.length ? Object.keys(objects[0]) : [];
+      return { columns, rows: objects.map((o) => columns.map((c) => o[c])), rowsAffected: 0, lastInsertRowid: null };
+    }
+    const info = stmt.run(...args);
+    return { columns: [], rows: [], rowsAffected: Number(info.changes), lastInsertRowid: info.lastInsertRowid };
+  }
+
+  async executeMultiple(sql) {
+    this.sqlite.exec(sql);
+  }
+
+  // Une transaction à la fois sur la connexion (les autres attendent leur tour).
+  async transaction() {
+    const previous = this.lock;
+    let release;
+    this.lock = new Promise((resolve) => (release = resolve));
+    await previous;
+    this.sqlite.exec('BEGIN IMMEDIATE');
+    let done = false;
+    const finish = (sql) => {
+      if (done) return;
+      done = true;
+      try {
+        this.sqlite.exec(sql);
+      } finally {
+        release();
+      }
+    };
+    return {
+      execute: (query) => this.execute(query),
+      commit: async () => finish('COMMIT'),
+      rollback: async () => finish('ROLLBACK'),
+      close: () => finish('ROLLBACK'),
+    };
+  }
+
+  close() {
+    this.sqlite.close();
+  }
+}
+
 /**
  * Ouvre la base :
- * - TURSO_DATABASE_URL (+ TURSO_AUTH_TOKEN) → base hébergée, persistante (production, Vercel) ;
+ * - TURSO_DATABASE_URL (+ TURSO_AUTH_TOKEN) → base hébergée Turso, persistante (production, Vercel) ;
  * - sinon un fichier SQLite local (DB_FILE, par défaut data/autoschub.db) ou ':memory:' pour les tests.
  */
 export async function openDb(file = process.env.DB_FILE || 'data/autoschub.db') {
-  let url = process.env.TURSO_DATABASE_URL;
-  if (!url) {
-    if (file !== ':memory:') mkdirSync(dirname(file), { recursive: true });
-    url = file === ':memory:' ? ':memory:' : `file:${file}`;
+  const tursoUrl = process.env.TURSO_DATABASE_URL?.trim();
+  const remote = Boolean(tursoUrl) && !tursoUrl.startsWith('file:');
+  let client;
+  let localPath = null;
+  if (remote) {
+    // Client Turso 100 % JavaScript (HTTP) : rien de natif à embarquer.
+    const { createClient } = await import('@libsql/client/web');
+    client = createClient({ url: tursoUrl.replace(/^libsql:\/\//, 'https://'), authToken: process.env.TURSO_AUTH_TOKEN?.trim() });
+  } else {
+    localPath = tursoUrl ? tursoUrl.slice('file:'.length) : file;
+    if (localPath !== ':memory:') mkdirSync(dirname(localPath), { recursive: true });
+    client = new LocalClient(localPath);
   }
-  // Base distante : client 100 % JavaScript (pas de module natif à embarquer sur Vercel).
-  const remote = /^(libsql|https?|wss?):/.test(url);
-  const { createClient } = remote ? await import('@libsql/client/web') : await import('@libsql/client');
-  const client = createClient({ url, authToken: process.env.TURSO_AUTH_TOKEN });
 
   const db = {
     ...wrap(client),
     client,
-    isRemote: Boolean(process.env.TURSO_DATABASE_URL),
+    isRemote: remote,
     exec: (sql) => client.executeMultiple(sql),
     async transaction(fn) {
       const tx = await client.transaction('write');
@@ -173,7 +233,7 @@ export async function openDb(file = process.env.DB_FILE || 'data/autoschub.db') 
   };
 
   // Base locale partagée par plusieurs processus : attendre plutôt qu'échouer sur un verrou.
-  if (!remote && url !== ':memory:') await db.exec('PRAGMA busy_timeout = 5000;');
+  if (localPath && localPath !== ':memory:') await db.exec('PRAGMA busy_timeout = 5000;');
 
   // Démarrage à froid rapide : une seule requête si la base est déjà à jour,
   // au lieu de recréer le schéma et vérifier chaque colonne (allers-retours vers Turso).
