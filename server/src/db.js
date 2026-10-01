@@ -83,7 +83,15 @@ CREATE TABLE IF NOT EXISTS subscriptions (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_subscriptions_student ON subscriptions(student_id);
+
+CREATE TABLE IF NOT EXISTS app_meta (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
 `;
+
+// À incrémenter à chaque changement de SCHEMA ou d'ADDED_COLUMNS.
+export const SCHEMA_VERSION = '4';
 
 // Colonnes ajoutées après la première version : migration des bases existantes.
 const ADDED_COLUMNS = {
@@ -155,13 +163,36 @@ export async function openDb(file = process.env.DB_FILE || 'data/autoschub.db') 
       }
     },
     close: () => client.close(),
+    async setMeta(key, value) {
+      await client.execute({
+        sql: 'INSERT INTO app_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+        args: [key, value],
+      });
+      db.meta[key] = value;
+    },
   };
 
   // Base locale partagée par plusieurs processus : attendre plutôt qu'échouer sur un verrou.
   if (!remote && url !== ':memory:') await db.exec('PRAGMA busy_timeout = 5000;');
-  await db.exec(SCHEMA);
-  await migrate(db);
+
+  // Démarrage à froid rapide : une seule requête si la base est déjà à jour,
+  // au lieu de recréer le schéma et vérifier chaque colonne (allers-retours vers Turso).
+  db.meta = await readMeta(db);
+  if (db.meta.schema_version !== SCHEMA_VERSION) {
+    await db.exec(SCHEMA);
+    await migrate(db);
+    await db.setMeta('schema_version', SCHEMA_VERSION);
+  }
   return db;
+}
+
+async function readMeta(db) {
+  try {
+    const rows = await db.all('SELECT key, value FROM app_meta');
+    return Object.fromEntries(rows.map((r) => [r.key, r.value]));
+  } catch {
+    return {}; // base neuve : la table n'existe pas encore
+  }
 }
 
 async function migrate(db) {
