@@ -3,6 +3,7 @@ import { requireAuth } from '../auth.js';
 import { transaction } from '../db.js';
 import { HttpError } from '../errors.js';
 import { serializeBooking } from '../serializers.js';
+import { quoteLesson } from '../subscriptions.js';
 
 const BOOKING_SELECT = `
   SELECT b.*,
@@ -51,6 +52,22 @@ export function bookingRoutes(db) {
     res.json({ bookings: rows.map((row) => serializeBooking(row, req.user.role)) });
   });
 
+  // Devis avant réservation : prix de la leçon et part couverte par le pack.
+  router.get('/quote', requireAuth('student'), (req, res) => {
+    const instructor = db.prepare('SELECT hourly_rate_cents FROM instructors WHERE user_id = ?').get(
+      Number(req.query.instructorId),
+    );
+    if (!instructor) throw new HttpError(404, 'Moniteur introuvable.');
+    const duration = Number(req.query.durationMin) || 60;
+    const quote = quoteLesson(db, req.user.id, req.query.category, duration, instructor.hourly_rate_cents);
+    res.json({
+      lessonPrice: quote.lessonCents / 100,
+      studentPrice: quote.studentPriceCents / 100,
+      coveredMinutes: quote.coveredMinutes,
+      withPack: Boolean(quote.subscription),
+    });
+  });
+
   router.get('/:id', (req, res) => {
     res.json({ booking: serializeBooking(loadOwnBooking(req), req.user.role) });
   });
@@ -90,12 +107,15 @@ export function bookingRoutes(db) {
       if (busy.some((b) => overlaps(start, duration, b.start_at, b.duration_min))) {
         throw new HttpError(409, 'Ce créneau n’est plus disponible.');
       }
-      const priceCents = Math.round((instructor.hourly_rate_cents * duration) / 60);
+      // Le moniteur touche toujours le prix de la leçon ; le pack de l'élève
+      // couvre des heures incluses et/ou une réduction sur sa part.
+      const quote = quoteLesson(db, req.user.id, category, duration, instructor.hourly_rate_cents);
       return db
         .prepare(
           `INSERT INTO bookings (student_id, instructor_id, category, start_at, duration_min, is_instant,
-             pickup_address, pickup_lat, pickup_lng, price_cents)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             pickup_address, pickup_lat, pickup_lng, price_cents, student_price_cents, covered_minutes,
+             subscription_id, subscription_period)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           req.user.id,
@@ -107,7 +127,11 @@ export function bookingRoutes(db) {
           pickupAddress.trim(),
           Number.isFinite(Number(pickupLat)) ? Number(pickupLat) : null,
           Number.isFinite(Number(pickupLng)) ? Number(pickupLng) : null,
-          priceCents,
+          quote.lessonCents,
+          quote.studentPriceCents,
+          quote.coveredMinutes,
+          quote.subscription?.id ?? null,
+          quote.subscription?.current_period_start ?? null,
         ).lastInsertRowid;
     });
 

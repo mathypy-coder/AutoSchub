@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api, formatPrice, LANGUAGE_LABELS } from '../../api.js';
 import MapView from '../../components/MapView.jsx';
 import { Chips, ErrorMessage, Stars } from '../../components/ui.jsx';
@@ -167,6 +167,7 @@ function BookingPanel({ instructor, category, pickup, onBack, onBooked }) {
   const [durationMin, setDurationMin] = useState(60);
   const [pickupAddress, setPickupAddress] = useState('');
   const [reviews, setReviews] = useState([]);
+  const [quote, setQuote] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -176,7 +177,14 @@ function BookingPanel({ instructor, category, pickup, onBack, onBooked }) {
       .catch(() => {});
   }, [instructor.id]);
 
-  const total = (instructor.hourlyRate * durationMin) / 60;
+  useEffect(() => {
+    const params = new URLSearchParams({ instructorId: instructor.id, category, durationMin });
+    api(`/bookings/quote?${params}`)
+      .then(setQuote)
+      .catch(() => setQuote(null));
+  }, [instructor.id, category, durationMin]);
+
+  const total = quote ? quote.studentPrice : (instructor.hourlyRate * durationMin) / 60;
 
   const submit = async (e) => {
     e.preventDefault();
@@ -259,9 +267,19 @@ function BookingPanel({ instructor, category, pickup, onBack, onBooked }) {
             required
           />
         </label>
+        {quote?.withPack ? (
+          <p className="pack-note small">
+            🎟️ {quote.coveredMinutes > 0 ? `${quote.coveredMinutes} min incluses dans ton pack` : 'Heures incluses épuisées ce mois-ci'}
+            {quote.studentPrice < quote.lessonPrice && <> · au lieu de {formatPrice(quote.lessonPrice)}</>}
+          </p>
+        ) : (
+          <p className="muted small">
+            <Link to="/pack">Avec un pack</Link>, des heures de conduite sont incluses chaque mois.
+          </p>
+        )}
         <ErrorMessage error={error} />
         <button className="btn btn-primary btn-block" disabled={busy}>
-          {busy ? 'Envoi…' : `Réserver ${category} · ${formatPrice(total)}`}
+          {busy ? 'Envoi…' : `Réserver ${category} · ${total === 0 ? 'inclus' : formatPrice(total)}`}
         </button>
         <p className="muted small center">Paiement à la fin de la leçon. Annulation gratuite tant que le moniteur n’a pas accepté.</p>
       </form>

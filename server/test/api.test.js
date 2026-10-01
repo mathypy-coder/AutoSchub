@@ -7,6 +7,7 @@ import { gradeAnswers } from '../src/routes/theory.js';
 
 let server;
 let baseUrl;
+let db;
 
 async function api(path, { method = 'GET', body, token } = {}) {
   const res = await fetch(`${baseUrl}${path}`, {
@@ -24,7 +25,7 @@ const login = async (email) =>
   (await api('/api/auth/login', { method: 'POST', body: { email, password: DEMO_PASSWORD } })).data.token;
 
 before(async () => {
-  const db = openDb(':memory:');
+  db = openDb(':memory:');
   seed(db);
   server = createApp(db).listen(0);
   await new Promise((resolve) => server.once('listening', resolve));
@@ -141,7 +142,7 @@ describe('cycle de réservation', () => {
 describe('théorie', () => {
   test('quiz sans réponses puis correction enregistrée', async () => {
     const token = await login('eleve@autoschub.be');
-    const quiz = await api('/api/theory/quiz?category=B&mode=exam');
+    const quiz = await api('/api/theory/quiz?category=B&mode=exam', { token });
     assert.ok(quiz.data.questions.length > 20);
     assert.ok(quiz.data.questions.every((q) => q.answer === undefined));
 
@@ -177,5 +178,106 @@ describe('théorie', () => {
     assert.equal(gradeAnswers(questions, answers).score, 41);
     answers.q3 = 1;
     assert.equal(gradeAnswers(questions, answers).passed, false);
+  });
+});
+
+describe('packs d’abonnement', () => {
+  const inDays = (d, hour = 10) => {
+    const date = new Date(Date.now() + d * 86400000);
+    date.setUTCHours(hour, 0, 0, 0);
+    return date.toISOString();
+  };
+
+  test('examens blancs limités sans pack, heures incluses et réduction avec pack', async () => {
+    const { data: reg } = await api('/api/auth/register', {
+      method: 'POST',
+      body: { role: 'student', firstName: 'Tom', lastName: 'Pack', email: 'tom@test.be', password: 'motdepasse' },
+    });
+    const token = reg.token;
+
+    assert.equal((await api('/api/subscriptions/me', { token })).data.subscription, null);
+    assert.equal((await api('/api/theory/quiz?category=B&mode=exam')).status, 401);
+
+    for (let i = 0; i < 2; i += 1) {
+      const quiz = await api('/api/theory/quiz?category=B&mode=exam', { token });
+      assert.equal(quiz.status, 200);
+      await api('/api/theory/submit', {
+        method: 'POST', token,
+        body: { category: 'B', mode: 'exam', questionIds: quiz.data.questions.map((q) => q.id), answers: {} },
+      });
+    }
+    assert.equal((await api('/api/theory/quiz?category=B&mode=exam', { token })).status, 402);
+
+    const sub = await api('/api/subscriptions', { method: 'POST', token, body: { planId: 'conduite', category: 'B' } });
+    assert.equal(sub.status, 201);
+    assert.equal(sub.data.subscription.remainingMinutes, 180);
+    assert.equal(sub.data.journey.steps.length, 6);
+    const again = await api('/api/subscriptions', { method: 'POST', token, body: { planId: 'integral', category: 'B' } });
+    assert.equal(again.status, 409);
+    assert.equal((await api('/api/theory/quiz?category=B&mode=exam', { token })).status, 200);
+
+    const { data: list } = await api('/api/instructors?category=B');
+    const lucas = list.instructors.find((i) => i.firstName === 'Lucas'); // 50 €/h
+
+    const quote = await api(`/api/bookings/quote?instructorId=${lucas.id}&category=B&durationMin=120`, { token });
+    assert.deepEqual(quote.data, { lessonPrice: 100, studentPrice: 0, coveredMinutes: 120, withPack: true });
+
+    const first = await api('/api/bookings', {
+      method: 'POST', token,
+      body: { instructorId: lucas.id, category: 'B', durationMin: 120, pickupAddress: 'Rue A', startAt: inDays(3) },
+    });
+    assert.equal(first.data.booking.coveredMinutes, 120);
+    assert.equal(first.data.booking.studentPrice, 0);
+    assert.equal(first.data.booking.price, 100);
+
+    const second = await api('/api/bookings', {
+      method: 'POST', token,
+      body: { instructorId: lucas.id, category: 'B', durationMin: 120, pickupAddress: 'Rue A', startAt: inDays(4) },
+    });
+    assert.equal(second.data.booking.coveredMinutes, 60);
+    assert.equal(second.data.booking.studentPrice, 45); // 60 min à 50 € avec -10 %
+
+    // Une annulation rend les heures au pack.
+    await api(`/api/bookings/${first.data.booking.id}/status`, { method: 'POST', token, body: { status: 'cancelled' } });
+    const me = await api('/api/subscriptions/me', { token });
+    assert.equal(me.data.subscription.remainingMinutes, 120);
+
+    // Catégorie hors pack : plein tarif.
+    const other = await api(`/api/bookings/quote?instructorId=${lucas.id}&category=A&durationMin=60`, { token });
+    assert.equal(other.data.studentPrice, 50);
+
+    // Renouvellement mensuel : les heures incluses repartent à zéro.
+    db.prepare("UPDATE subscriptions SET current_period_end = ? WHERE id = ?").run(
+      new Date(Date.now() - 1000).toISOString(),
+      me.data.subscription.id,
+    );
+    const renewed = await api('/api/subscriptions/me', { token });
+    assert.equal(renewed.data.subscription.remainingMinutes, 180);
+  });
+
+  test('parcours : étapes déclarées puis permis obtenu clôture le pack', async () => {
+    const token = await login('eleve@autoschub.be');
+    await api('/api/subscriptions', { method: 'POST', token, body: { planId: 'integral', category: 'B' } });
+
+    const bad = await api('/api/subscriptions/me/journey', { method: 'PATCH', token, body: { examDate: 'demain' } });
+    assert.equal(bad.status, 400);
+
+    const step = await api('/api/subscriptions/me/journey', {
+      method: 'PATCH', token, body: { provisionalAt: '2026-09-01', examDate: '2026-12-15' },
+    });
+    const byId = Object.fromEntries(step.data.journey.steps.map((s) => [s.id, s]));
+    assert.equal(byId.provisional.done, true);
+    assert.equal(byId.exam.done, true);
+    assert.equal(byId.driving.detail.startsWith('1.5 h'), true); // leçon terminée dans le test précédent
+    assert.equal(step.data.journey.coach.firstName, 'Sophie');
+
+    const cancel = await api('/api/subscriptions/me/cancel', { method: 'POST', token, body: {} });
+    assert.equal(cancel.data.subscription.cancelAtPeriodEnd, true);
+
+    const done = await api('/api/subscriptions/me/journey', {
+      method: 'PATCH', token, body: { licenseObtainedAt: '2026-12-15' },
+    });
+    assert.equal(done.data.subscription.status, 'completed');
+    assert.equal((await api('/api/subscriptions/me', { token })).data.subscription, null);
   });
 });

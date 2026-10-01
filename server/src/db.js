@@ -68,7 +68,42 @@ CREATE TABLE IF NOT EXISTS theory_attempts (
   passed INTEGER NOT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS subscriptions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  student_id INTEGER NOT NULL REFERENCES users(id),
+  plan_id TEXT NOT NULL,
+  category TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'cancelled', 'completed')),
+  current_period_start TEXT NOT NULL,
+  current_period_end TEXT NOT NULL,
+  cancel_at_period_end INTEGER NOT NULL DEFAULT 0,
+  provisional_at TEXT,
+  exam_date TEXT,
+  license_obtained_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_student ON subscriptions(student_id);
 `;
+
+// Colonnes ajoutées après la première version : migration des bases existantes.
+const ADDED_COLUMNS = {
+  bookings: {
+    student_price_cents: 'INTEGER',
+    covered_minutes: 'INTEGER NOT NULL DEFAULT 0',
+    subscription_id: 'INTEGER REFERENCES subscriptions(id)',
+    subscription_period: 'TEXT',
+  },
+};
+
+function migrate(db) {
+  for (const [table, columns] of Object.entries(ADDED_COLUMNS)) {
+    const existing = new Set(db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name));
+    for (const [name, type] of Object.entries(columns)) {
+      if (!existing.has(name)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${type}`);
+    }
+  }
+}
 
 export function openDb(file = process.env.DB_FILE || 'data/autoschub.db') {
   if (file !== ':memory:') mkdirSync(dirname(file), { recursive: true });
@@ -76,6 +111,7 @@ export function openDb(file = process.env.DB_FILE || 'data/autoschub.db') {
   db.exec('PRAGMA foreign_keys = ON;');
   if (file !== ':memory:') db.exec('PRAGMA journal_mode = WAL;');
   db.exec(SCHEMA);
+  migrate(db);
   return db;
 }
 

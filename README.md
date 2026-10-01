@@ -8,6 +8,11 @@ avec un module de **théorie** intégré.
 - **Moniteur** : comme un chauffeur Uber, il passe **en ligne / hors ligne**, partage sa position, reçoit les demandes,
   les accepte ou les refuse, fait avancer la leçon (en route → en cours → terminée), laisse un retour pédagogique
   et suit ses gains (commission plateforme 20 %).
+- **Packs d’abonnement** (Théorie 9,99 €, Conduite 149 €, Intégral 279 € / mois, liés à une catégorie de permis) :
+  heures de conduite incluses chaque mois, réduction sur les heures supplémentaires, examens blancs illimités
+  (2 par semaine sans pack) et **suivi du parcours complet** — théorie réussie, permis provisoire, heures de conduite
+  vs objectif, examen pratique planifié, permis obtenu — avec conseil sur la prochaine étape et moniteur référent.
+  Le moniteur est toujours payé au prix plein de la leçon ; le paiement de l’abonnement est simulé.
 - **Théorie** : entraînement par thème et examens blancs au barème belge (réussite à 41/50, faute grave = 5 points),
   correction détaillée et historique.
 
@@ -81,11 +86,14 @@ Couvre l’inscription/connexion, la recherche géographique, tout le cycle d’
 | GET/POST | `/api/bookings` | élève (création) |
 | POST | `/api/bookings/:id/status` (`accepted`, `declined`, `en_route`, `in_progress`, `completed`, `cancelled`) | selon l’étape |
 | POST | `/api/bookings/:id/review`, `/api/bookings/:id/feedback` | élève / moniteur |
+| GET | `/api/subscriptions/plans`, `/api/subscriptions/me`, `/api/bookings/quote` | — / élève |
+| POST | `/api/subscriptions`, `/api/subscriptions/me/plan`, `/api/subscriptions/me/cancel` · PATCH `/api/subscriptions/me/journey` | élève |
 | GET | `/api/theory/categories`, `/api/theory/quiz`, POST `/api/theory/submit`, GET `/api/theory/history` | — |
 
 ## Pistes pour la suite
 
-- Paiement en ligne (Bancontact / Payconiq via Stripe ou Mollie) et facturation.
+- Paiement en ligne (Bancontact / Payconiq via Stripe ou Mollie) et facturation, y compris le prélèvement
+  mensuel des packs (aujourd’hui simulé) et la rémunération des moniteurs sur les heures incluses.
 - Suivi temps réel par WebSocket (aujourd’hui : rafraîchissement toutes les 5 s).
 - Vérification des agréments moniteurs (back-office) et des permis provisoires des élèves.
 - Traductions NL / DE / EN et banque de questions élargie (≥ 50 questions par catégorie, panneaux illustrés).

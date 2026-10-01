@@ -8,6 +8,7 @@ import Profile from './pages/Profile.jsx';
 import Book from './pages/student/Book.jsx';
 import Lessons from './pages/Lessons.jsx';
 import Theory from './pages/student/Theory.jsx';
+import Pack from './pages/student/Pack.jsx';
 import Dashboard from './pages/instructor/Dashboard.jsx';
 import InstructorProfile from './pages/instructor/InstructorProfile.jsx';
 
@@ -15,6 +16,7 @@ const STUDENT_NAV = [
   { to: '/reserver', label: 'Réserver', icon: '🚗' },
   { to: '/lecons', label: 'Mes leçons', icon: '📅' },
   { to: '/theorie', label: 'Théorie', icon: '📝' },
+  { to: '/pack', label: 'Mon pack', icon: '🎟️' },
   { to: '/profil', label: 'Profil', icon: '👤' },
 ];
 
@@ -68,6 +70,7 @@ export default function App() {
         <Route path="/reserver" element={<Book />} />
         <Route path="/lecons" element={<Lessons />} />
         <Route path="/theorie" element={<Theory />} />
+        <Route path="/pack" element={<Pack />} />
         <Route path="/profil" element={<Profile />} />
         <Route path="*" element={<Navigate to="/reserver" replace />} />
       </Routes>

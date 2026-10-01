@@ -7,6 +7,7 @@ import { errorHandler } from './errors.js';
 import { authRoutes } from './routes/auth.js';
 import { bookingRoutes } from './routes/bookings.js';
 import { instructorRoutes } from './routes/instructors.js';
+import { subscriptionRoutes } from './routes/subscriptions.js';
 import { theoryRoutes } from './routes/theory.js';
 
 const CLIENT_DIST = fileURLToPath(new URL('../../client/dist', import.meta.url));
@@ -22,6 +23,7 @@ export function createApp(db) {
   app.use('/api/instructors', instructorRoutes(db));
   app.use('/api/bookings', bookingRoutes(db));
   app.use('/api/theory', theoryRoutes(db));
+  app.use('/api/subscriptions', subscriptionRoutes(db));
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Route inconnue.' }));
 
   // En production, le serveur sert aussi l'application web compilée.

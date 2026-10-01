@@ -2,7 +2,9 @@ import { Router } from 'express';
 import { requireAuth } from '../auth.js';
 import { EXAM_RULES, THEORY_CATEGORIES } from '../data/permits.js';
 import { QUESTIONS } from '../data/questions.js';
+import { FREE_EXAMS_PER_WEEK } from '../data/plans.js';
 import { HttpError } from '../errors.js';
+import { hasActiveSubscription } from '../subscriptions.js';
 
 const QUESTIONS_BY_ID = new Map(QUESTIONS.map((q) => [q.id, q]));
 const THEORY_CODES = THEORY_CATEGORIES.map((c) => c.code);
@@ -57,6 +59,24 @@ export function gradeAnswers(questions, answers) {
   };
 }
 
+// Sans pack : quelques examens blancs gratuits par semaine. Avec un pack : illimité.
+function assertExamAllowed(db, user) {
+  if (!user) throw new HttpError(401, 'Connecte-toi pour passer un examen blanc.');
+  if (user.role !== 'student' || hasActiveSubscription(db, user.id)) return;
+  const { n } = db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM theory_attempts
+       WHERE user_id = ? AND mode = 'exam' AND created_at >= datetime('now', '-7 days')`,
+    )
+    .get(user.id);
+  if (n >= FREE_EXAMS_PER_WEEK) {
+    throw new HttpError(
+      402,
+      `Tu as utilisé tes ${FREE_EXAMS_PER_WEEK} examens blancs gratuits de la semaine. Passe à un pack pour un accès illimité.`,
+    );
+  }
+}
+
 export function theoryRoutes(db) {
   const router = Router();
 
@@ -74,6 +94,7 @@ export function theoryRoutes(db) {
     const { category, theme } = req.query;
     const mode = req.query.mode === 'exam' ? 'exam' : 'practice';
     if (!THEORY_CODES.includes(category)) throw new HttpError(400, 'Catégorie théorique invalide.');
+    if (mode === 'exam') assertExamAllowed(db, req.user);
 
     let pool = forCategory(category);
     if (mode === 'practice' && theme) pool = pool.filter((q) => q.theme === theme);
@@ -133,7 +154,17 @@ export function theoryRoutes(db) {
       )
       .all(req.user.id)
       .map((a) => ({ ...a, passed: Boolean(a.passed) }));
-    res.json({ attempts });
+    const examsThisWeek = db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM theory_attempts
+         WHERE user_id = ? AND mode = 'exam' AND created_at >= datetime('now', '-7 days')`,
+      )
+      .get(req.user.id).n;
+    const unlimited = req.user.role !== 'student' || hasActiveSubscription(db, req.user.id);
+    res.json({
+      attempts,
+      freeExamsLeft: unlimited ? null : Math.max(0, FREE_EXAMS_PER_WEEK - examsThisWeek),
+    });
   });
 
   return router;

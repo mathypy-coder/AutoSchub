@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api, formatDateTime } from '../../api.js';
 import { Chips, ErrorMessage } from '../../components/ui.jsx';
 
@@ -8,11 +9,15 @@ export default function Theory() {
   const [quiz, setQuiz] = useState(null);
   const [result, setResult] = useState(null);
   const [history, setHistory] = useState([]);
+  const [freeExamsLeft, setFreeExamsLeft] = useState(null);
   const [error, setError] = useState('');
 
   const loadHistory = () =>
     api('/theory/history')
-      .then((d) => setHistory(d.attempts))
+      .then((d) => {
+        setHistory(d.attempts);
+        setFreeExamsLeft(d.freeExamsLeft);
+      })
       .catch(() => {});
 
   useEffect(() => {
@@ -75,9 +80,20 @@ export default function Theory() {
               {Math.min(meta.rules.questionCount, current?.questionCount ?? 0)} questions · {meta.rules.durationMinutes} min ·
               réussite à 41/50 (82 %) · une faute grave = {meta.rules.gravePenalty} points.
             </p>
-            <button type="button" className="btn btn-primary btn-block" onClick={() => start('exam')}>
+            <button
+              type="button"
+              className="btn btn-primary btn-block"
+              disabled={freeExamsLeft === 0}
+              onClick={() => start('exam')}
+            >
               Lancer l’examen blanc
             </button>
+            {freeExamsLeft != null && (
+              <p className="small center">
+                {freeExamsLeft} examen(s) blanc(s) gratuit(s) restant(s) cette semaine ·{' '}
+                <Link to="/pack">illimité avec un pack</Link>
+              </p>
+            )}
           </div>
 
           <h2 className="section-title">S’entraîner par thème</h2>

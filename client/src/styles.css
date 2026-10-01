@@ -769,3 +769,124 @@ textarea:focus {
 .correction p {
   margin: 0;
 }
+
+/* ——— Packs d'abonnement ——— */
+.plans {
+  display: flex;
+  flex-direction: column;
+}
+.plan {
+  position: relative;
+}
+.plan h2 {
+  margin: 0;
+}
+.plan p {
+  margin: 0;
+}
+.plan-popular {
+  border: 2px solid var(--accent);
+}
+.plan-flag {
+  position: absolute;
+  top: -11px;
+  right: 14px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+}
+.plan-price {
+  font-size: 1.6rem;
+  font-weight: 800;
+  margin: 0.3rem 0;
+}
+.plan-features {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 0.6rem;
+  font-size: 0.9rem;
+  line-height: 1.7;
+}
+.pack-hero h1 {
+  margin: 0.2rem 0;
+}
+.pack-hero p {
+  margin: 0;
+}
+.pack-note {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+  padding: 0.5rem 0.7rem;
+  border-radius: 10px;
+  margin: 0;
+}
+.next-step {
+  border-left: 4px solid var(--accent);
+}
+.journey {
+  list-style: none;
+  padding: 0;
+  margin: 0.6rem 0;
+}
+.journey-step {
+  display: flex;
+  gap: 0.8rem;
+  padding: 0 0 1.1rem;
+  position: relative;
+}
+.journey-step:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 13px;
+  top: 28px;
+  bottom: 0;
+  width: 2px;
+  background: var(--border);
+}
+.journey-step.done:not(:last-child)::before {
+  background: var(--accent);
+}
+.journey-dot {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: var(--bg);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  font-weight: 800;
+  font-size: 0.85rem;
+}
+.journey-step.done .journey-dot {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.journey-step.current .journey-dot {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+.journey-step .progress {
+  margin: 0.35rem 0;
+}
+.link-button {
+  display: block;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.declare {
+  margin-top: 0.4rem;
+}
+.declare input {
+  flex: 1;
+}

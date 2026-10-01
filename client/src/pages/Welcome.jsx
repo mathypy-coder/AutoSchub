@@ -4,6 +4,7 @@ const FEATURES = [
   { icon: '📍', title: 'Ton moniteur en 2 clics', text: 'Vois les moniteurs autour de toi sur la carte et réserve maintenant ou plus tard.' },
   { icon: '🏍️', title: 'Tous les permis', text: 'AM, A1, A2, A, B, BE, C, CE, D, DE, G : voiture, moto, camion, bus et tracteur.' },
   { icon: '📝', title: 'Théorie incluse', text: 'Examens blancs au barème belge (41/50, faute grave = 5 points).' },
+  { icon: '🎟️', title: 'Des packs qui te suivent', text: 'Abonnement mensuel avec heures incluses et suivi de chaque étape, de la théorie au permis.' },
   { icon: '⭐', title: 'Moniteurs notés', text: 'Moniteurs agréés, notés par les élèves après chaque leçon.' },
 ];
 

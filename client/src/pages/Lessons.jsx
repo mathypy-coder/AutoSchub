@@ -85,11 +85,14 @@ function BookingCard({ booking: b, role, onChange }) {
     <article className={`card booking booking-${b.status}`}>
       <div className="row-between">
         <StatusBadge status={b.status} />
-        <strong>{formatPrice(b.price)}</strong>
+        <strong>{formatPrice(role === 'student' ? b.studentPrice : b.price)}</strong>
       </div>
       <h3>
         Permis {b.category} · {b.durationMin} min
       </h3>
+      {role === 'student' && b.coveredMinutes > 0 && (
+        <p className="pack-note small">🎟️ {b.coveredMinutes} min couvertes par ton pack</p>
+      )}
       <p className="small">
         {b.isInstant ? '⚡ Leçon immédiate — ' : '📅 '}
         {formatDateTime(b.startAt)}

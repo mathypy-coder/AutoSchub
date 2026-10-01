@@ -67,6 +67,8 @@ export function serializeBooking(row, viewerRole) {
     pickupLng: row.pickup_lng,
     status: row.status,
     price: centsToEuros(row.price_cents),
+    studentPrice: centsToEuros(row.student_price_cents ?? row.price_cents),
+    coveredMinutes: row.covered_minutes ?? 0,
     studentRating: row.student_rating,
     studentComment: row.student_comment,
     instructorFeedback: row.instructor_feedback,
