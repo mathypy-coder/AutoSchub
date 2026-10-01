@@ -16,6 +16,7 @@
     "test": "npm test --workspace server"
   },
   "engines": {
-    "node": ">=22.5"
-  }
+    "node": "22.x"
+  },
+  "type": "module"
 }

@@ -47,6 +47,20 @@ Comptes de démo (mot de passe `demo1234`) : `eleve@autoschub.be` et `moniteur@a
 Variables d’environnement : `PORT` (3001), `DB_FILE` (`data/autoschub.db`), `AUTH_SECRET`
 (aléatoire par défaut — les sessions sont alors perdues au redémarrage), `SEED=0` pour désactiver la démo.
 
+## Déployer sur Vercel
+
+`vercel.json` est fourni : le site compilé est servi depuis `client/dist` et l’API Express tourne comme
+fonction serverless (`api/index.js`). Dans les réglages du projet Vercel :
+
+- **Root Directory** : la racine du dépôt (pas `client/` ni `server/`), *Framework Preset* : « Other ».
+- **Node.js Version** : 22.x (requis pour `node:sqlite`).
+- **Variable d’environnement** `AUTH_SECRET` : une longue chaîne aléatoire (sinon les connexions expirent
+  à chaque redémarrage de fonction).
+
+⚠️ Sur Vercel, la base SQLite vit dans `/tmp` : elle est **éphémère** (les comptes de démo sont recréés,
+mais les inscriptions et réservations peuvent disparaître). Pour la production, brancher une base hébergée
+(Turso, Neon, Supabase…).
+
 ## Tests
 
 ```bash

@@ -1,5 +1,8 @@
 import { createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 
+if (!process.env.AUTH_SECRET && process.env.VERCEL) {
+  console.warn('AUTH_SECRET non défini : les sessions ne survivront pas aux redémarrages des fonctions.');
+}
 const SECRET = process.env.AUTH_SECRET || randomBytes(32).toString('hex');
 const TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
