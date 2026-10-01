@@ -25,7 +25,7 @@ export default function ExamCenters() {
       ...(nearMe ? { lat: position.lat, lng: position.lng } : {}),
     });
     const timer = setTimeout(() => {
-      api(`/exam-centers?${params}`, { auth: false })
+      api(`/exam-centers?${params}`)
         .then((d) => {
           setData(d);
           setError('');

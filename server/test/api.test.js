@@ -2,10 +2,7 @@ import { after, before, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createApp } from '../src/app.js';
 import { openDb } from '../src/db.js';
-import { DEMO_PASSWORD, DEMO_PACK_EMAIL, seed, seedDemo, seedDemoPack } from '../src/seed.js';
-import { mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { DEMO_PASSWORD, DEMO_PACK_EMAIL, seed, seedDemoPack } from '../src/seed.js';
 import { buildJourney, getActiveSubscription, serializeSubscription } from '../src/subscriptions.js';
 import { gradeAnswers } from '../src/routes/theory.js';
 
@@ -337,29 +334,5 @@ describe('démo avec pack', () => {
     assert.ok(steps.driving.detail.startsWith('8 h sur 20 h'));
     assert.equal(steps.exam.done, false);
     demoDb.close();
-  });
-});
-
-describe('démarrage à froid', () => {
-  test('une base déjà prête ne refait ni le schéma ni la démo', async () => {
-    const file = join(mkdtempSync(join(tmpdir(), 'autoschub-')), 'cold.db');
-    const first = await openDb(file);
-    await seedDemo(first);
-    first.close();
-
-    const second = await openDb(file);
-    assert.equal(second.meta.schema_version !== undefined, true);
-    let queries = 0;
-    for (const method of ['get', 'all', 'run', 'exec', 'transaction']) {
-      const original = second[method];
-      second[method] = (...args) => {
-        queries += 1;
-        return original(...args);
-      };
-    }
-    await seedDemo(second);
-    assert.equal(queries, 0);
-    assert.ok(await second.get('SELECT 1 FROM users WHERE email = ?', DEMO_PACK_EMAIL));
-    second.close();
   });
 });

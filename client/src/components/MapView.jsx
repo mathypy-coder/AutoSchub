@@ -1,6 +1,5 @@
 import { useEffect } from 'react';
 import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
 import { MapContainer, Marker, Popup, TileLayer, Tooltip, useMap, useMapEvents } from 'react-leaflet';
 
 const icon = (className, label = '') =>

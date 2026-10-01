@@ -79,20 +79,6 @@ sinon packs, leçons et inscriptions disparaissent ou n’apparaissent que par m
 
 Réglages du projet : *Root Directory* = racine du dépôt, *Framework Preset* = « Other », Node.js 22.x.
 
-Optimisations incluses :
-
-- **Région** : l’API tourne à Paris (`cdg1`). Crée ta base Turso dans une région proche
-  (Paris ou Francfort) : chaque requête fait plusieurs allers-retours vers la base.
-- **Démarrage à froid** : schéma et données de démo mémorisés dans la base (`app_meta`) ;
-  une instance qui démarre ne fait qu’une requête au lieu d’une dizaine. Si la base ne répond pas,
-  l’API renvoie une erreur 503 et réessaie à la requête suivante.
-- **Cache** : fichiers du site (`/assets`) en cache 1 an ; permis, centres d’examen, packs et catégories
-  de théorie servis par le CDN de Vercel sans réveiller la fonction.
-- **Front** : écrans et carte chargés à la demande ; rafraîchissement automatique en pause quand
-  l’onglet est caché.
-- **Diagnostic** : `/api/health` indique la base utilisée (`turso` ou `locale`), si le secret
-  d’authentification est configuré et la région Vercel.
-
 ## Tests
 
 ```bash

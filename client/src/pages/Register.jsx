@@ -32,7 +32,7 @@ export default function Register() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    api('/permits', { auth: false }).then((d) => setPermits(d.permits)).catch(() => {});
+    api('/permits').then((d) => setPermits(d.permits)).catch(() => {});
   }, []);
 
   const field = (name) => ({

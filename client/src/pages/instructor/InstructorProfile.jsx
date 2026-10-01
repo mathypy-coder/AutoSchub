@@ -19,7 +19,7 @@ export default function InstructorProfile() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    api('/permits', { auth: false }).then((d) => setPermits(d.permits)).catch(() => {});
+    api('/permits').then((d) => setPermits(d.permits)).catch(() => {});
     api('/instructors/me/profile')
       .then(({ instructor }) => setForm(instructor))
       .catch((err) => setError(err.message));

@@ -1,21 +1,17 @@
-import { lazy, Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './auth.jsx';
 import BottomNav from './components/BottomNav.jsx';
 import Welcome from './pages/Welcome.jsx';
 import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
-
-// Écrans chargés à la demande : l'accueil et la connexion s'affichent sans
-// télécharger la carte (Leaflet) ni le reste de l'application.
-const Profile = lazy(() => import('./pages/Profile.jsx'));
-const Book = lazy(() => import('./pages/student/Book.jsx'));
-const Lessons = lazy(() => import('./pages/Lessons.jsx'));
-const Theory = lazy(() => import('./pages/student/Theory.jsx'));
-const Pack = lazy(() => import('./pages/student/Pack.jsx'));
-const ExamCenters = lazy(() => import('./pages/ExamCenters.jsx'));
-const Dashboard = lazy(() => import('./pages/instructor/Dashboard.jsx'));
-const InstructorProfile = lazy(() => import('./pages/instructor/InstructorProfile.jsx'));
+import Profile from './pages/Profile.jsx';
+import Book from './pages/student/Book.jsx';
+import Lessons from './pages/Lessons.jsx';
+import Theory from './pages/student/Theory.jsx';
+import Pack from './pages/student/Pack.jsx';
+import ExamCenters from './pages/ExamCenters.jsx';
+import Dashboard from './pages/instructor/Dashboard.jsx';
+import InstructorProfile from './pages/instructor/InstructorProfile.jsx';
 
 const STUDENT_NAV = [
   { to: '/reserver', label: 'Réserver', icon: '🚗' },
@@ -36,9 +32,7 @@ const INSTRUCTOR_NAV = [
 function Shell({ nav, children }) {
   return (
     <div className="shell">
-      <main className="shell-main">
-        <Suspense fallback={<div className="page muted">Chargement…</div>}>{children}</Suspense>
-      </main>
+      <main className="shell-main">{children}</main>
       <BottomNav items={nav} />
     </div>
   );

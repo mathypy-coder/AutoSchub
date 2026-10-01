@@ -21,7 +21,7 @@ export default function Theory() {
       .catch(() => {});
 
   useEffect(() => {
-    api('/theory/categories', { auth: false }).then(setMeta).catch((err) => setError(err.message));
+    api('/theory/categories').then(setMeta).catch((err) => setError(err.message));
     loadHistory();
   }, []);
 

@@ -183,20 +183,13 @@ export async function seedDemoPack(db) {
 // Données de démo au démarrage : comptes de base, puis élève avec pack (désactivable avec DEMO_PACK=0).
 export async function seedDemo(db) {
   if (process.env.SEED === '0') return;
-  const withPack = process.env.DEMO_PACK !== '0';
-  // Déjà fait (mémorisé dans la base) : rien à vérifier, démarrage plus rapide.
-  const marker = `v1${withPack ? '+pack' : ''}`;
-  if (db.meta?.demo_seeded === marker) return;
-
   await seedIfEmpty(db);
-  if (withPack) {
-    try {
-      if (await seedDemoPack(db)) console.log(`Élève de démo avec pack créé : ${DEMO_PACK_EMAIL}.`);
-    } catch (err) {
-      if (!/UNIQUE|SQLITE_BUSY|locked/i.test(String(err?.message))) throw err;
-    }
+  if (process.env.DEMO_PACK === '0') return;
+  try {
+    if (await seedDemoPack(db)) console.log(`Élève de démo avec pack créé : ${DEMO_PACK_EMAIL}.`);
+  } catch (err) {
+    if (!/UNIQUE|SQLITE_BUSY|locked/i.test(String(err?.message))) throw err;
   }
-  await db.setMeta?.('demo_seeded', marker);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
