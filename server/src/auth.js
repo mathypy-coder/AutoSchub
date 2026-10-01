@@ -1,9 +1,19 @@
-import { createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 
-if (!process.env.AUTH_SECRET && process.env.VERCEL) {
-  console.warn('AUTH_SECRET non défini : les sessions ne survivront pas aux redémarrages des fonctions.');
+// Le secret doit être identique sur toutes les instances (Vercel en lance plusieurs).
+// À défaut d'AUTH_SECRET, on le dérive du jeton Turso, lui aussi secret et stable.
+function resolveSecret() {
+  if (process.env.AUTH_SECRET) return process.env.AUTH_SECRET;
+  if (process.env.TURSO_AUTH_TOKEN) {
+    return createHash('sha256').update(`autoschub-auth:${process.env.TURSO_AUTH_TOKEN}`).digest('hex');
+  }
+  if (process.env.VERCEL) {
+    console.warn('AUTH_SECRET non défini : les connexions ne survivront pas aux redémarrages des fonctions.');
+  }
+  return randomBytes(32).toString('hex');
 }
-const SECRET = process.env.AUTH_SECRET || randomBytes(32).toString('hex');
+
+const SECRET = resolveSecret();
 const TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 export function hashPassword(password) {
@@ -47,12 +57,11 @@ export function readToken(token) {
 }
 
 export function authMiddleware(db) {
-  const findUser = db.prepare('SELECT * FROM users WHERE id = ?');
-  return (req, _res, next) => {
+  return async (req, _res, next) => {
     const header = req.headers.authorization || '';
     const token = header.startsWith('Bearer ') ? header.slice(7) : null;
     const data = readToken(token);
-    if (data) req.user = findUser.get(data.uid) || null;
+    if (data) req.user = (await db.get('SELECT * FROM users WHERE id = ?', data.uid)) || null;
     next();
   };
 }

@@ -25,14 +25,17 @@ const login = async (email) =>
   (await api('/api/auth/login', { method: 'POST', body: { email, password: DEMO_PASSWORD } })).data.token;
 
 before(async () => {
-  db = openDb(':memory:');
-  seed(db);
+  db = await openDb(':memory:');
+  await seed(db);
   server = createApp(db).listen(0);
   await new Promise((resolve) => server.once('listening', resolve));
   baseUrl = `http://127.0.0.1:${server.address().port}`;
 });
 
-after(() => server.close());
+after(() => {
+  server.close();
+  db.close();
+});
 
 describe('auth', () => {
   test('inscription élève puis /me', async () => {
@@ -247,7 +250,8 @@ describe('packs d’abonnement', () => {
     assert.equal(other.data.studentPrice, 50);
 
     // Renouvellement mensuel : les heures incluses repartent à zéro.
-    db.prepare("UPDATE subscriptions SET current_period_end = ? WHERE id = ?").run(
+    await db.run(
+      'UPDATE subscriptions SET current_period_end = ? WHERE id = ?',
       new Date(Date.now() - 1000).toISOString(),
       me.data.subscription.id,
     );

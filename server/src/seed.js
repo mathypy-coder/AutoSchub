@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { hashPassword } from './auth.js';
-import { openDb, transaction } from './db.js';
+import { openDb } from './db.js';
 
 export const DEMO_PASSWORD = 'demo1234';
 
@@ -67,44 +67,46 @@ const DEMO_INSTRUCTORS = [
   },
 ];
 
-export function seed(db) {
-  const insertUser = db.prepare(
-    `INSERT INTO users (role, first_name, last_name, email, password_hash, phone, city)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  );
-  const insertInstructor = db.prepare(
-    `INSERT INTO instructors (user_id, bio, school_name, approval_number, categories, languages, transmission,
-       vehicle, hourly_rate_cents, lat, lng, is_online, rating_sum, rating_count)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  );
+const INSERT_USER = `INSERT INTO users (role, first_name, last_name, email, password_hash, phone, city)
+  VALUES (?, ?, ?, ?, ?, ?, ?)`;
+const INSERT_INSTRUCTOR = `INSERT INTO instructors (user_id, bio, school_name, approval_number, categories, languages,
+  transmission, vehicle, hourly_rate_cents, lat, lng, is_online, rating_sum, rating_count)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+
+export async function seed(db) {
   const password = hashPassword(DEMO_PASSWORD);
 
-  transaction(db, () => {
-    insertUser.run('student', 'Emma', 'Janssens', 'eleve@autoschub.be', password, '+32 470 00 00 01', 'Bruxelles');
-    DEMO_INSTRUCTORS.forEach((m, index) => {
+  await db.transaction(async (tx) => {
+    await tx.run(INSERT_USER, 'student', 'Emma', 'Janssens', 'eleve@autoschub.be', password, '+32 470 00 00 01', 'Bruxelles');
+    for (const [index, m] of DEMO_INSTRUCTORS.entries()) {
       const email = index === 0 ? 'moniteur@autoschub.be' : `${m.first}.${m.last}@autoschub.be`.toLowerCase();
-      const { lastInsertRowid } = insertUser.run(
-        'instructor', m.first, m.last, email, password, `+32 470 10 00 ${String(index).padStart(2, '0')}`, m.city,
+      const { lastInsertRowid } = await tx.run(
+        INSERT_USER, 'instructor', m.first, m.last, email, password, `+32 470 10 00 ${String(index).padStart(2, '0')}`, m.city,
       );
       const ratingCount = 8 + ((index * 7) % 30);
       const ratingSum = Math.round(ratingCount * (4.5 + ((index * 3) % 5) / 10));
-      insertInstructor.run(
+      await tx.run(
+        INSERT_INSTRUCTOR,
         lastInsertRowid, m.bio, m.school, `AGR-${2024000 + index * 137}`, JSON.stringify(m.categories),
         JSON.stringify(m.languages), m.transmission, m.vehicle, m.rate * 100, m.lat, m.lng, m.online ? 1 : 0,
         Math.min(ratingSum, ratingCount * 5), ratingCount,
       );
-    });
+    }
   });
 }
 
-export function seedIfEmpty(db) {
-  const { n } = db.prepare('SELECT COUNT(*) AS n FROM users').get();
-  if (n === 0) {
-    seed(db);
+export async function seedIfEmpty(db) {
+  const { n } = await db.get('SELECT COUNT(*) AS n FROM users');
+  if (n > 0) return;
+  try {
+    await seed(db);
     console.log(`Données de démo créées (mot de passe : ${DEMO_PASSWORD}).`);
+  } catch (err) {
+    // Deux instances peuvent démarrer en même temps sur une base vide : une seule gagne.
+    if (!/UNIQUE|SQLITE_BUSY|locked/i.test(String(err?.message))) throw err;
   }
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  seedIfEmpty(openDb());
+  await seedIfEmpty(await openDb());
 }

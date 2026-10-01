@@ -26,7 +26,7 @@ export function examCenterRoutes() {
   const router = Router();
 
   // Recherche par texte (ville, code postal, nom, opérateur), Région et proximité.
-  router.get('/', (req, res) => {
+  router.get('/', async (req, res) => {
     const lat = Number(req.query.lat);
     const lng = Number(req.query.lng);
     const from = req.query.lat && req.query.lng && Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;

@@ -24,13 +24,13 @@ export function instructorRoutes(db) {
   const router = Router();
 
   // Recherche « à la Uber » : moniteurs proches, triés par distance.
-  router.get('/', (req, res) => {
+  router.get('/', async (req, res) => {
     const from = readPosition(req.query);
     const { category, transmission, language } = req.query;
     const onlineOnly = req.query.onlineOnly === '1' || req.query.onlineOnly === 'true';
     const maxKm = Number(req.query.maxKm) || 50;
 
-    const rows = db.prepare(`${INSTRUCTOR_SELECT} WHERE i.lat IS NOT NULL AND i.lng IS NOT NULL`).all();
+    const rows = await db.all(`${INSTRUCTOR_SELECT} WHERE i.lat IS NOT NULL AND i.lng IS NOT NULL`);
     const instructors = rows
       .map((row) => serializeInstructor(row, from))
       .filter((i) => i.distanceKm <= maxKm)
@@ -44,12 +44,12 @@ export function instructorRoutes(db) {
   });
 
   // Espace moniteur : profil, statut en ligne, statistiques.
-  router.get('/me/profile', requireAuth('instructor'), (req, res) => {
-    const row = db.prepare(`${INSTRUCTOR_SELECT} WHERE i.user_id = ?`).get(req.user.id);
+  router.get('/me/profile', requireAuth('instructor'), async (req, res) => {
+    const row = await db.get(`${INSTRUCTOR_SELECT} WHERE i.user_id = ?`, req.user.id);
     res.json({ instructor: serializeInstructor(row) });
   });
 
-  router.patch('/me/profile', requireAuth('instructor'), (req, res) => {
+  router.patch('/me/profile', requireAuth('instructor'), async (req, res) => {
     const body = req.body ?? {};
     const updates = [];
     const values = [];
@@ -99,30 +99,30 @@ export function instructorRoutes(db) {
     }
 
     if (updates.length) {
-      db.prepare(`UPDATE instructors SET ${updates.join(', ')} WHERE user_id = ?`).run(...values, req.user.id);
+      await db.run(`UPDATE instructors SET ${updates.join(', ')} WHERE user_id = ?`, ...values, req.user.id);
     }
-    const row = db.prepare(`${INSTRUCTOR_SELECT} WHERE i.user_id = ?`).get(req.user.id);
+    const row = await db.get(`${INSTRUCTOR_SELECT} WHERE i.user_id = ?`, req.user.id);
     res.json({ instructor: serializeInstructor(row) });
   });
 
-  router.get('/me/stats', requireAuth('instructor'), (req, res) => {
-    const totals = db
-      .prepare(
-        `SELECT COUNT(*) AS lessons, COALESCE(SUM(duration_min), 0) AS minutes,
+  router.get('/me/stats', requireAuth('instructor'), async (req, res) => {
+    const totals = await db.get(
+      `SELECT COUNT(*) AS lessons, COALESCE(SUM(duration_min), 0) AS minutes,
                 COALESCE(SUM(price_cents), 0) AS gross
          FROM bookings WHERE instructor_id = ? AND status = 'completed'`,
-      )
-      .get(req.user.id);
-    const week = db
-      .prepare(
-        `SELECT COALESCE(SUM(price_cents), 0) AS gross FROM bookings
+      req.user.id,
+    );
+    const week = await db.get(
+      `SELECT COALESCE(SUM(price_cents), 0) AS gross FROM bookings
          WHERE instructor_id = ? AND status = 'completed' AND start_at >= ?`,
-      )
-      .get(req.user.id, new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString());
-    const pending = db
-      .prepare(`SELECT COUNT(*) AS n FROM bookings WHERE instructor_id = ? AND status = 'pending'`)
-      .get(req.user.id);
-    const profile = db.prepare('SELECT rating_sum, rating_count FROM instructors WHERE user_id = ?').get(req.user.id);
+      req.user.id,
+      new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString(),
+    );
+    const pending = await db.get(
+      `SELECT COUNT(*) AS n FROM bookings WHERE instructor_id = ? AND status = 'pending'`,
+      req.user.id,
+    );
+    const profile = await db.get('SELECT rating_sum, rating_count FROM instructors WHERE user_id = ?', req.user.id);
 
     res.json({
       lessons: totals.lessons,
@@ -137,18 +137,17 @@ export function instructorRoutes(db) {
     });
   });
 
-  router.get('/:id', (req, res) => {
-    const row = db.prepare(`${INSTRUCTOR_SELECT} WHERE i.user_id = ?`).get(Number(req.params.id));
+  router.get('/:id', async (req, res) => {
+    const row = await db.get(`${INSTRUCTOR_SELECT} WHERE i.user_id = ?`, Number(req.params.id));
     if (!row) throw new HttpError(404, 'Moniteur introuvable.');
-    const reviews = db
-      .prepare(
-        `SELECT b.student_rating AS rating, b.student_comment AS comment, b.updated_at AS date,
+    const reviews = await db.all(
+      `SELECT b.student_rating AS rating, b.student_comment AS comment, b.updated_at AS date,
                 b.category, u.first_name AS author
          FROM bookings b JOIN users u ON u.id = b.student_id
          WHERE b.instructor_id = ? AND b.student_rating IS NOT NULL
          ORDER BY b.updated_at DESC LIMIT 10`,
-      )
-      .all(row.user_id);
+      row.user_id,
+    );
     res.json({ instructor: serializeInstructor(row, readPosition(req.query)), reviews });
   });
 

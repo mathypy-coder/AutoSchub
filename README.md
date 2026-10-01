@@ -31,7 +31,8 @@ avec un module de **théorie** intégré.
 
 ## Stack
 
-- `server/` — Node.js 22, Express 5, SQLite intégré (`node:sqlite`), auth par jeton signé HMAC + mots de passe scrypt.
+- `server/` — Node.js 22, Express 5, SQLite via `@libsql/client` (fichier local en dev, Turso en production),
+  auth par jeton signé HMAC + mots de passe scrypt.
 - `client/` — React 19 + Vite, React Router, Leaflet / OpenStreetMap pour la carte.
 
 ## Démarrer
@@ -52,22 +53,29 @@ AUTH_SECRET=une-longue-valeur-secrète npm start
 Comptes de démo (mot de passe `demo1234`) : `eleve@autoschub.be` et `moniteur@autoschub.be`
 (10 moniteurs répartis à Bruxelles, Gand, Anvers, Liège, Namur, Charleroi, Mons, Eupen…).
 
-Variables d’environnement : `PORT` (3001), `DB_FILE` (`data/autoschub.db`), `AUTH_SECRET`
+Variables d’environnement : `PORT` (3001), `DB_FILE` (`data/autoschub.db`, base locale),
+`TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN` (base hébergée, prioritaire sur `DB_FILE`), `AUTH_SECRET`
 (aléatoire par défaut — les sessions sont alors perdues au redémarrage), `SEED=0` pour désactiver la démo.
 
 ## Déployer sur Vercel
 
 `vercel.json` est fourni : le site compilé est servi depuis `client/dist` et l’API Express tourne comme
-fonction serverless (`api/index.js`). Dans les réglages du projet Vercel :
+fonction serverless (`api/index.js`).
 
-- **Root Directory** : la racine du dépôt (pas `client/` ni `server/`), *Framework Preset* : « Other ».
-- **Node.js Version** : 22.x (requis pour `node:sqlite`).
-- **Variable d’environnement** `AUTH_SECRET` : une longue chaîne aléatoire (sinon les connexions expirent
-  à chaque redémarrage de fonction).
+Vercel lance plusieurs instances éphémères de l’API : les données doivent donc vivre dans une **base hébergée**,
+sinon packs, leçons et inscriptions disparaissent ou n’apparaissent que par moments. L’app utilise
+[Turso](https://turso.tech) (SQLite hébergé, offre gratuite) :
 
-⚠️ Sur Vercel, la base SQLite vit dans `/tmp` : elle est **éphémère** (les comptes de démo sont recréés,
-mais les inscriptions et réservations peuvent disparaître). Pour la production, brancher une base hébergée
-(Turso, Neon, Supabase…).
+1. Crée une base sur turso.tech (ou `turso db create autoschub`), puis récupère son URL (`libsql://…`)
+   et un jeton (`turso db tokens create autoschub`).
+2. Dans Vercel → *Settings* → *Environment Variables*, ajoute :
+   - `TURSO_DATABASE_URL` = l’URL `libsql://…`
+   - `TURSO_AUTH_TOKEN` = le jeton
+   - (facultatif) `AUTH_SECRET` = une longue chaîne aléatoire ; sinon il est dérivé du jeton Turso.
+3. Redéploie. Les tables et les comptes de démo sont créés automatiquement au premier appel
+   (`SEED=0` pour ne pas créer la démo).
+
+Réglages du projet : *Root Directory* = racine du dépôt, *Framework Preset* = « Other », Node.js 22.x.
 
 ## Tests
 

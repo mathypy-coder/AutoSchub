@@ -60,15 +60,14 @@ export function gradeAnswers(questions, answers) {
 }
 
 // Sans pack : quelques examens blancs gratuits par semaine. Avec un pack : illimité.
-function assertExamAllowed(db, user) {
+async function assertExamAllowed(db, user) {
   if (!user) throw new HttpError(401, 'Connecte-toi pour passer un examen blanc.');
-  if (user.role !== 'student' || hasActiveSubscription(db, user.id)) return;
-  const { n } = db
-    .prepare(
-      `SELECT COUNT(*) AS n FROM theory_attempts
+  if (user.role !== 'student' || (await hasActiveSubscription(db, user.id))) return;
+  const { n } = await db.get(
+    `SELECT COUNT(*) AS n FROM theory_attempts
        WHERE user_id = ? AND mode = 'exam' AND created_at >= datetime('now', '-7 days')`,
-    )
-    .get(user.id);
+    user.id,
+  );
   if (n >= FREE_EXAMS_PER_WEEK) {
     throw new HttpError(
       402,
@@ -90,11 +89,11 @@ export function theoryRoutes(db) {
     });
   });
 
-  router.get('/quiz', (req, res) => {
+  router.get('/quiz', async (req, res) => {
     const { category, theme } = req.query;
     const mode = req.query.mode === 'exam' ? 'exam' : 'practice';
     if (!THEORY_CODES.includes(category)) throw new HttpError(400, 'Catégorie théorique invalide.');
-    if (mode === 'exam') assertExamAllowed(db, req.user);
+    if (mode === 'exam') await assertExamAllowed(db, req.user);
 
     let pool = forCategory(category);
     if (mode === 'practice' && theme) pool = pool.filter((q) => q.theme === theme);
@@ -114,7 +113,7 @@ export function theoryRoutes(db) {
     });
   });
 
-  router.post('/submit', (req, res) => {
+  router.post('/submit', async (req, res) => {
     const { category, mode = 'practice', theme = null, answers = {} } = req.body ?? {};
     if (!THEORY_CODES.includes(category)) throw new HttpError(400, 'Catégorie théorique invalide.');
     const ids = Object.keys(answers);
@@ -126,10 +125,9 @@ export function theoryRoutes(db) {
 
     const result = gradeAnswers(questions, answers);
     if (req.user) {
-      db.prepare(
+      await db.run(
         `INSERT INTO theory_attempts (user_id, category, mode, theme, score, max_score, correct, total, grave_faults, passed)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).run(
         req.user.id,
         category,
         mode === 'exam' ? 'exam' : 'practice',
@@ -145,22 +143,21 @@ export function theoryRoutes(db) {
     res.json(result);
   });
 
-  router.get('/history', requireAuth(), (req, res) => {
-    const attempts = db
-      .prepare(
+  router.get('/history', requireAuth(), async (req, res) => {
+    const attempts = (
+      await db.all(
         `SELECT id, category, mode, theme, score, max_score AS maxScore, correct, total,
                 grave_faults AS graveFaults, passed, created_at AS createdAt
          FROM theory_attempts WHERE user_id = ? ORDER BY id DESC LIMIT 50`,
+        req.user.id,
       )
-      .all(req.user.id)
-      .map((a) => ({ ...a, passed: Boolean(a.passed) }));
-    const examsThisWeek = db
-      .prepare(
-        `SELECT COUNT(*) AS n FROM theory_attempts
+    ).map((a) => ({ ...a, passed: Boolean(a.passed) }));
+    const { n: examsThisWeek } = await db.get(
+      `SELECT COUNT(*) AS n FROM theory_attempts
          WHERE user_id = ? AND mode = 'exam' AND created_at >= datetime('now', '-7 days')`,
-      )
-      .get(req.user.id).n;
-    const unlimited = req.user.role !== 'student' || hasActiveSubscription(db, req.user.id);
+      req.user.id,
+    );
+    const unlimited = req.user.role !== 'student' || (await hasActiveSubscription(db, req.user.id));
     res.json({
       attempts,
       freeExamsLeft: unlimited ? null : Math.max(0, FREE_EXAMS_PER_WEEK - examsThisWeek),

@@ -10,7 +10,7 @@ export const addDays = (iso, days) => new Date(Date.parse(iso) + days * DAY_MS).
 
 // Renouvelle (ou clôture) l'abonnement si sa période est échue.
 // Le renouvellement est calculé à la lecture : pas besoin de tâche planifiée.
-function refreshPeriod(db, sub, now = Date.now()) {
+async function refreshPeriod(db, sub, now = Date.now()) {
   let { current_period_start: start, current_period_end: end } = sub;
   let status = sub.status;
   while (status === 'active' && Date.parse(end) <= now) {
@@ -22,43 +22,49 @@ function refreshPeriod(db, sub, now = Date.now()) {
     }
   }
   if (status !== sub.status || start !== sub.current_period_start) {
-    db.prepare(
+    await db.run(
       'UPDATE subscriptions SET status = ?, current_period_start = ?, current_period_end = ? WHERE id = ?',
-    ).run(status, start, end, sub.id);
+      status,
+      start,
+      end,
+      sub.id,
+    );
     return { ...sub, status, current_period_start: start, current_period_end: end };
   }
   return sub;
 }
 
-export function getActiveSubscription(db, studentId) {
-  const sub = db
-    .prepare(`SELECT * FROM subscriptions WHERE student_id = ? AND status = 'active' ORDER BY id DESC LIMIT 1`)
-    .get(studentId);
+export async function getActiveSubscription(db, studentId) {
+  const sub = await db.get(
+    `SELECT * FROM subscriptions WHERE student_id = ? AND status = 'active' ORDER BY id DESC LIMIT 1`,
+    studentId,
+  );
   if (!sub) return null;
-  const fresh = refreshPeriod(db, sub);
+  const fresh = await refreshPeriod(db, sub);
   return fresh.status === 'active' ? fresh : null;
 }
 
-export function usedMinutes(db, sub) {
-  const { minutes } = db
-    .prepare(
-      `SELECT COALESCE(SUM(covered_minutes), 0) AS minutes FROM bookings
+export async function usedMinutes(db, sub) {
+  const { minutes } = await db.get(
+    `SELECT COALESCE(SUM(covered_minutes), 0) AS minutes FROM bookings
        WHERE subscription_id = ? AND subscription_period = ?
          AND status IN (${COUNTED_STATUSES.map(() => '?').join(',')})`,
-    )
-    .get(sub.id, sub.current_period_start, ...COUNTED_STATUSES);
+    sub.id,
+    sub.current_period_start,
+    ...COUNTED_STATUSES,
+  );
   return minutes;
 }
 
 // Calcule ce que l'élève paie pour une leçon, en tenant compte de son pack.
-export function quoteLesson(db, studentId, category, durationMin, hourlyRateCents) {
+export async function quoteLesson(db, studentId, category, durationMin, hourlyRateCents) {
   const lessonCents = Math.round((hourlyRateCents * durationMin) / 60);
-  const sub = getActiveSubscription(db, studentId);
+  const sub = await getActiveSubscription(db, studentId);
   if (!sub || sub.category !== category) {
     return { lessonCents, studentPriceCents: lessonCents, coveredMinutes: 0, subscription: null };
   }
   const plan = PLANS_BY_ID.get(sub.plan_id);
-  const remaining = Math.max(0, plan.includedMinutes - usedMinutes(db, sub));
+  const remaining = Math.max(0, plan.includedMinutes - (await usedMinutes(db, sub)));
   const coveredMinutes = Math.min(remaining, durationMin);
   const extraCents = Math.round((hourlyRateCents * (durationMin - coveredMinutes)) / 60);
   return {
@@ -69,34 +75,34 @@ export function quoteLesson(db, studentId, category, durationMin, hourlyRateCent
   };
 }
 
-export function hasActiveSubscription(db, studentId) {
-  return Boolean(getActiveSubscription(db, studentId));
+export async function hasActiveSubscription(db, studentId) {
+  return Boolean(await getActiveSubscription(db, studentId));
 }
 
-export function buildJourney(db, sub) {
+export async function buildJourney(db, sub) {
   const permit = PERMITS.find((p) => p.code === sub.category);
   const theoryCategory = permit?.theoryCategory ?? sub.category;
-  const bestExam = db
-    .prepare(
-      `SELECT score, max_score, passed, created_at FROM theory_attempts
+  const bestExam = await db.get(
+    `SELECT score, max_score, passed, created_at FROM theory_attempts
        WHERE user_id = ? AND category = ? AND mode = 'exam'
        ORDER BY passed DESC, CAST(score AS REAL) / max_score DESC LIMIT 1`,
-    )
-    .get(sub.student_id, theoryCategory);
-  const driving = db
-    .prepare(
-      `SELECT COUNT(*) AS lessons, COALESCE(SUM(duration_min), 0) AS minutes FROM bookings
+    sub.student_id,
+    theoryCategory,
+  );
+  const driving = await db.get(
+    `SELECT COUNT(*) AS lessons, COALESCE(SUM(duration_min), 0) AS minutes FROM bookings
        WHERE student_id = ? AND category = ? AND status = 'completed'`,
-    )
-    .get(sub.student_id, sub.category);
-  const coach = db
-    .prepare(
-      `SELECT u.id, u.first_name AS firstName, u.last_name AS lastName, COUNT(*) AS lessons
+    sub.student_id,
+    sub.category,
+  );
+  const coach = await db.get(
+    `SELECT u.id, u.first_name AS firstName, u.last_name AS lastName, COUNT(*) AS lessons
        FROM bookings b JOIN users u ON u.id = b.instructor_id
        WHERE b.student_id = ? AND b.category = ? AND b.status = 'completed'
        GROUP BY u.id ORDER BY lessons DESC LIMIT 1`,
-    )
-    .get(sub.student_id, sub.category);
+    sub.student_id,
+    sub.category,
+  );
 
   const targetHours = TARGET_HOURS[sub.category] ?? 20;
   const hours = Math.round((driving.minutes / 60) * 10) / 10;
@@ -161,9 +167,9 @@ export function buildJourney(db, sub) {
   };
 }
 
-export function serializeSubscription(db, sub) {
+export async function serializeSubscription(db, sub) {
   const plan = PLANS_BY_ID.get(sub.plan_id);
-  const used = usedMinutes(db, sub);
+  const used = await usedMinutes(db, sub);
   return {
     id: sub.id,
     plan,

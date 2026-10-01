@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import { requireAuth } from '../auth.js';
-import { transaction } from '../db.js';
 import { HttpError } from '../errors.js';
 import { serializeBooking } from '../serializers.js';
 import { quoteLesson } from '../subscriptions.js';
@@ -37,29 +36,30 @@ export function bookingRoutes(db) {
   const router = Router();
   router.use(requireAuth());
 
-  const findBooking = (id) => db.prepare(`${BOOKING_SELECT} WHERE b.id = ?`).get(id);
+  const findBooking = (id) => db.get(`${BOOKING_SELECT} WHERE b.id = ?`, id);
 
-  const loadOwnBooking = (req) => {
-    const row = findBooking(Number(req.params.id));
+  const loadOwnBooking = async (req) => {
+    const row = await findBooking(Number(req.params.id));
     const ownerColumn = req.user.role === 'student' ? 'student_id' : 'instructor_id';
     if (!row || row[ownerColumn] !== req.user.id) throw new HttpError(404, 'Leçon introuvable.');
     return row;
   };
 
-  router.get('/', (req, res) => {
+  router.get('/', async (req, res) => {
     const column = req.user.role === 'student' ? 'b.student_id' : 'b.instructor_id';
-    const rows = db.prepare(`${BOOKING_SELECT} WHERE ${column} = ? ORDER BY b.start_at DESC`).all(req.user.id);
+    const rows = await db.all(`${BOOKING_SELECT} WHERE ${column} = ? ORDER BY b.start_at DESC`, req.user.id);
     res.json({ bookings: rows.map((row) => serializeBooking(row, req.user.role)) });
   });
 
   // Devis avant réservation : prix de la leçon et part couverte par le pack.
-  router.get('/quote', requireAuth('student'), (req, res) => {
-    const instructor = db.prepare('SELECT hourly_rate_cents FROM instructors WHERE user_id = ?').get(
+  router.get('/quote', requireAuth('student'), async (req, res) => {
+    const instructor = await db.get(
+      'SELECT hourly_rate_cents FROM instructors WHERE user_id = ?',
       Number(req.query.instructorId),
     );
     if (!instructor) throw new HttpError(404, 'Moniteur introuvable.');
     const duration = Number(req.query.durationMin) || 60;
-    const quote = quoteLesson(db, req.user.id, req.query.category, duration, instructor.hourly_rate_cents);
+    const quote = await quoteLesson(db, req.user.id, req.query.category, duration, instructor.hourly_rate_cents);
     res.json({
       lessonPrice: quote.lessonCents / 100,
       studentPrice: quote.studentPriceCents / 100,
@@ -68,13 +68,13 @@ export function bookingRoutes(db) {
     });
   });
 
-  router.get('/:id', (req, res) => {
-    res.json({ booking: serializeBooking(loadOwnBooking(req), req.user.role) });
+  router.get('/:id', async (req, res) => {
+    res.json({ booking: serializeBooking(await loadOwnBooking(req), req.user.role) });
   });
 
-  router.post('/', requireAuth('student'), (req, res) => {
+  router.post('/', requireAuth('student'), async (req, res) => {
     const { instructorId, category, startAt, durationMin = 60, pickupAddress, pickupLat, pickupLng } = req.body ?? {};
-    const instructor = db.prepare('SELECT * FROM instructors WHERE user_id = ?').get(Number(instructorId));
+    const instructor = await db.get('SELECT * FROM instructors WHERE user_id = ?', Number(instructorId));
     if (!instructor) throw new HttpError(404, 'Moniteur introuvable.');
     if (!JSON.parse(instructor.categories).includes(category)) {
       throw new HttpError(400, `Ce moniteur n’enseigne pas la catégorie ${category ?? '?'}.`);
@@ -97,88 +97,92 @@ export function bookingRoutes(db) {
     }
 
     const duration = Number(durationMin);
-    const id = transaction(db, () => {
-      const busy = db
-        .prepare(
-          `SELECT start_at, duration_min FROM bookings
+    const id = await db.transaction(async (tx) => {
+      const busy = await tx.all(
+        `SELECT start_at, duration_min FROM bookings
            WHERE instructor_id = ? AND status IN (${BLOCKING_STATUSES.map(() => '?').join(',')})`,
-        )
-        .all(instructor.user_id, ...BLOCKING_STATUSES);
+        instructor.user_id,
+        ...BLOCKING_STATUSES,
+      );
       if (busy.some((b) => overlaps(start, duration, b.start_at, b.duration_min))) {
         throw new HttpError(409, 'Ce créneau n’est plus disponible.');
       }
       // Le moniteur touche toujours le prix de la leçon ; le pack de l'élève
       // couvre des heures incluses et/ou une réduction sur sa part.
-      const quote = quoteLesson(db, req.user.id, category, duration, instructor.hourly_rate_cents);
-      return db
-        .prepare(
-          `INSERT INTO bookings (student_id, instructor_id, category, start_at, duration_min, is_instant,
+      const quote = await quoteLesson(tx, req.user.id, category, duration, instructor.hourly_rate_cents);
+      const inserted = await tx.run(
+        `INSERT INTO bookings (student_id, instructor_id, category, start_at, duration_min, is_instant,
              pickup_address, pickup_lat, pickup_lng, price_cents, student_price_cents, covered_minutes,
              subscription_id, subscription_period)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        )
-        .run(
-          req.user.id,
-          instructor.user_id,
-          category,
-          start,
-          duration,
-          isInstant ? 1 : 0,
-          pickupAddress.trim(),
-          Number.isFinite(Number(pickupLat)) ? Number(pickupLat) : null,
-          Number.isFinite(Number(pickupLng)) ? Number(pickupLng) : null,
-          quote.lessonCents,
-          quote.studentPriceCents,
-          quote.coveredMinutes,
-          quote.subscription?.id ?? null,
-          quote.subscription?.current_period_start ?? null,
-        ).lastInsertRowid;
+        req.user.id,
+        instructor.user_id,
+        category,
+        start,
+        duration,
+        isInstant ? 1 : 0,
+        pickupAddress.trim(),
+        Number.isFinite(Number(pickupLat)) ? Number(pickupLat) : null,
+        Number.isFinite(Number(pickupLng)) ? Number(pickupLng) : null,
+        quote.lessonCents,
+        quote.studentPriceCents,
+        quote.coveredMinutes,
+        quote.subscription?.id ?? null,
+        quote.subscription?.current_period_start ?? null,
+      );
+      return inserted.lastInsertRowid;
     });
 
-    res.status(201).json({ booking: serializeBooking(findBooking(id), 'student') });
+    res.status(201).json({ booking: serializeBooking(await findBooking(id), 'student') });
   });
 
-  router.post('/:id/status', (req, res) => {
-    const row = loadOwnBooking(req);
+  router.post('/:id/status', async (req, res) => {
+    const row = await loadOwnBooking(req);
     const next = req.body?.status;
     const allowedBy = TRANSITIONS[row.status]?.[next];
     if (!allowedBy) throw new HttpError(409, `Transition impossible : ${row.status} → ${next}.`);
     if (allowedBy !== 'any' && allowedBy !== req.user.role) {
       throw new HttpError(403, 'Action non autorisée pour votre rôle.');
     }
-    db.prepare(`UPDATE bookings SET status = ?, updated_at = datetime('now') WHERE id = ?`).run(next, row.id);
-    res.json({ booking: serializeBooking(findBooking(row.id), req.user.role) });
+    await db.run(`UPDATE bookings SET status = ?, updated_at = datetime('now') WHERE id = ?`, next, row.id);
+    res.json({ booking: serializeBooking(await findBooking(row.id), req.user.role) });
   });
 
-  router.post('/:id/review', requireAuth('student'), (req, res) => {
-    const row = loadOwnBooking(req);
+  router.post('/:id/review', requireAuth('student'), async (req, res) => {
+    const row = await loadOwnBooking(req);
     const ratingValue = Number(req.body?.rating);
     if (row.status !== 'completed') throw new HttpError(409, 'Vous pourrez noter la leçon une fois terminée.');
     if (row.student_rating != null) throw new HttpError(409, 'Cette leçon a déjà été notée.');
     if (!Number.isInteger(ratingValue) || ratingValue < 1 || ratingValue > 5) {
       throw new HttpError(400, 'La note doit être comprise entre 1 et 5.');
     }
-    transaction(db, () => {
-      db.prepare(
+    await db.transaction(async (tx) => {
+      await tx.run(
         `UPDATE bookings SET student_rating = ?, student_comment = ?, updated_at = datetime('now') WHERE id = ?`,
-      ).run(ratingValue, req.body?.comment?.trim() || null, row.id);
-      db.prepare(
+        ratingValue,
+        req.body?.comment?.trim() || null,
+        row.id,
+      );
+      await tx.run(
         'UPDATE instructors SET rating_sum = rating_sum + ?, rating_count = rating_count + 1 WHERE user_id = ?',
-      ).run(ratingValue, row.instructor_id);
+        ratingValue,
+        row.instructor_id,
+      );
     });
-    res.json({ booking: serializeBooking(findBooking(row.id), 'student') });
+    res.json({ booking: serializeBooking(await findBooking(row.id), 'student') });
   });
 
-  router.post('/:id/feedback', requireAuth('instructor'), (req, res) => {
-    const row = loadOwnBooking(req);
+  router.post('/:id/feedback', requireAuth('instructor'), async (req, res) => {
+    const row = await loadOwnBooking(req);
     if (row.status !== 'completed') throw new HttpError(409, 'Le retour se donne après la leçon.');
     const feedback = String(req.body?.feedback ?? '').trim();
     if (!feedback) throw new HttpError(400, 'Le retour ne peut pas être vide.');
-    db.prepare(`UPDATE bookings SET instructor_feedback = ?, updated_at = datetime('now') WHERE id = ?`).run(
+    await db.run(
+      `UPDATE bookings SET instructor_feedback = ?, updated_at = datetime('now') WHERE id = ?`,
       feedback,
       row.id,
     );
-    res.json({ booking: serializeBooking(findBooking(row.id), 'instructor') });
+    res.json({ booking: serializeBooking(await findBooking(row.id), 'instructor') });
   });
 
   return router;
