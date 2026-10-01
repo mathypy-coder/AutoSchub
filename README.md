@@ -77,6 +77,10 @@ sinon packs, leçons et inscriptions disparaissent ou n’apparaissent que par m
 3. Redéploie. Les tables et les comptes de démo sont créés automatiquement au premier appel
    (`SEED=0` pour ne pas créer la démo).
 
+Le build génère aussi directement la sortie finale de Vercel (`.vercel/output`, « Build Output API » :
+site, fonction API compilée avec esbuild et routage). Le déploiement fonctionne donc même si le projet
+Vercel ignore `vercel.json` ou utilise un autre préréglage (Vite…).
+
 Réglages du projet : *Root Directory* = racine du dépôt, *Framework Preset* = « Other », Node.js 22.x.
 
 Optimisations incluses :

@@ -20,7 +20,19 @@ async function init() {
 // au lieu de laisser l'instance en panne jusqu'à son recyclage.
 let ready = null;
 
+// Les routes Vercel envoient /api/<chemin> vers /api?__path=<chemin> :
+// on restaure l'adresse d'origine pour qu'Express trouve la bonne route,
+// quelle que soit la façon dont la plateforme réécrit l'URL.
+function restoreOriginalUrl(req) {
+  const url = new URL(req.url, 'http://localhost');
+  const path = url.searchParams.get('__path');
+  if (path === null) return;
+  url.searchParams.delete('__path');
+  req.url = `/api/${path.replace(/^\/+/, '')}${url.search}`;
+}
+
 export default async function handler(req, res) {
+  restoreOriginalUrl(req);
   ready ??= init().catch((err) => {
     ready = null;
     throw err;

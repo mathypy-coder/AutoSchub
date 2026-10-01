@@ -7,3 +7,4 @@ client/dist/
 *.db-shm
 .env
 .DS_Store
+.vercel/
