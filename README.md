@@ -13,6 +13,9 @@ avec un module de **théorie** intégré.
   (2 par semaine sans pack) et **suivi du parcours complet** — théorie réussie, permis provisoire, heures de conduite
   vs objectif, examen pratique planifié, permis obtenu — avec conseil sur la prochaine étape et moniteur référent.
   Le moniteur est toujours payé au prix plein de la leçon ; le paiement de l’abonnement est simulé.
+- **Centres d’examen** : les 32 centres agréés (2 à Bruxelles, 14 en Wallonie, 16 en Flandre) affichés sur la carte
+  de réservation, et un onglet de recherche (ville, code postal, opérateur, Région, tri par distance) avec itinéraire,
+  lien de prise de rendez-vous et réservation d’une leçon près du centre. Coordonnées GPS approximatives.
 - **Théorie** : entraînement par thème et examens blancs au barème belge (réussite à 41/50, faute grave = 5 points),
   correction détaillée et historique.
 
@@ -88,6 +91,7 @@ Couvre l’inscription/connexion, la recherche géographique, tout le cycle d’
 | POST | `/api/bookings/:id/review`, `/api/bookings/:id/feedback` | élève / moniteur |
 | GET | `/api/subscriptions/plans`, `/api/subscriptions/me`, `/api/bookings/quote` | — / élève |
 | POST | `/api/subscriptions`, `/api/subscriptions/me/plan`, `/api/subscriptions/me/cancel` · PATCH `/api/subscriptions/me/journey` | élève |
+| GET | `/api/exam-centers?q&region&lat&lng` | — |
 | GET | `/api/theory/categories`, `/api/theory/quiz`, POST `/api/theory/submit`, GET `/api/theory/history` | — |
 
 ## Pistes pour la suite

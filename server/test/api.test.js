@@ -281,3 +281,31 @@ describe('packs d’abonnement', () => {
     assert.equal((await api('/api/subscriptions/me', { token })).data.subscription, null);
   });
 });
+
+describe('centres d’examen', () => {
+  test('liste les 32 centres, filtre par Région et par texte', async () => {
+    const all = await api('/api/exam-centers');
+    assert.equal(all.data.centers.length, 32);
+    const counts = all.data.centers.reduce((acc, c) => ({ ...acc, [c.region]: (acc[c.region] ?? 0) + 1 }), {});
+    assert.deepEqual(counts, { bruxelles: 2, wallonie: 14, flandre: 16 });
+
+    const namur = await api('/api/exam-centers?q=namur');
+    assert.deepEqual(namur.data.centers.map((c) => c.id), ['suarlee']);
+    const accent = await api('/api/exam-centers?q=liege');
+    assert.deepEqual(accent.data.centers.map((c) => c.id), ['wandre']);
+    const postal = await api('/api/exam-centers?q=9100');
+    assert.equal(postal.data.centers[0].city, 'Sint-Niklaas');
+
+    const brussels = await api('/api/exam-centers?region=bruxelles');
+    assert.equal(brussels.data.centers.length, 2);
+  });
+
+  test('trie par distance depuis une position', async () => {
+    const { data } = await api('/api/exam-centers?lat=50.85&lng=4.35');
+    assert.equal(data.centers[0].region, 'bruxelles');
+    for (let i = 1; i < data.centers.length; i += 1) {
+      assert.ok(data.centers[i - 1].distanceKm <= data.centers[i].distanceKm);
+    }
+    assert.ok(data.centers[0].directionsUrl.startsWith('https://www.google.com/maps/dir/'));
+  });
+});

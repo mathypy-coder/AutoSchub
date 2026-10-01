@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, formatPrice, LANGUAGE_LABELS } from '../../api.js';
 import MapView from '../../components/MapView.jsx';
 import { Chips, ErrorMessage, Stars } from '../../components/ui.jsx';
@@ -30,7 +30,11 @@ function defaultSlot() {
 
 export default function Book() {
   const navigate = useNavigate();
-  const { position, setPosition, located } = usePosition();
+  const [params] = useSearchParams();
+  const initial = params.get('lat') && params.get('lng') ? { lat: Number(params.get('lat')), lng: Number(params.get('lng')) } : null;
+  const { position, setPosition, located } = usePosition(initial);
+  const [examCenters, setExamCenters] = useState([]);
+  const [showCenters, setShowCenters] = useState(true);
   const [permits, setPermits] = useState([]);
   const [category, setCategory] = useState('B');
   const [transmission, setTransmission] = useState('');
@@ -39,6 +43,7 @@ export default function Book() {
 
   useEffect(() => {
     api('/permits').then((d) => setPermits(d.permits)).catch(() => {});
+    api('/exam-centers').then((d) => setExamCenters(d.centers)).catch(() => {});
   }, []);
 
   const query = new URLSearchParams({
@@ -96,14 +101,26 @@ export default function Book() {
         center={selected ? { lat: selected.lat, lng: selected.lng } : position}
         me={position}
         markers={markers}
+        examCenters={showCenters ? examCenters : []}
         selectedId={selectedId}
         onSelect={setSelectedId}
         onMapClick={setPosition}
       />
-      <p className="map-hint muted">
-        {located ? '📍 Position détectée.' : '📍 Position par défaut : Bruxelles.'} Touchez la carte pour changer le point de
-        prise en charge.
-      </p>
+      <div className="map-hint muted row-between">
+        <span>
+          {params.get('centre')
+            ? `🏁 Près du centre d’examen ${params.get('centre')}.`
+            : located
+              ? '📍 Position détectée.'
+              : '📍 Position par défaut : Bruxelles.'}{' '}
+          Touchez la carte pour changer le point
+          de prise en charge.
+        </span>
+        <label className="switch">
+          <input type="checkbox" checked={showCenters} onChange={(e) => setShowCenters(e.target.checked)} />
+          🏁 Centres
+        </label>
+      </div>
 
       <section className="sheet">
         {selected ? (

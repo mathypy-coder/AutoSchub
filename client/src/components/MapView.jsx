@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import L from 'leaflet';
-import { MapContainer, Marker, TileLayer, Tooltip, useMap, useMapEvents } from 'react-leaflet';
+import { MapContainer, Marker, Popup, TileLayer, Tooltip, useMap, useMapEvents } from 'react-leaflet';
 
 const icon = (className, label = '') =>
   L.divIcon({ className: '', html: `<div class="pin ${className}">${label}</div>`, iconSize: [34, 34], iconAnchor: [17, 17] });
@@ -10,6 +10,8 @@ const ICONS = {
   online: icon('pin-online', '🚗'),
   offline: icon('pin-offline', '🚗'),
   selected: icon('pin-selected', '🚗'),
+  center: icon('pin-center', '🏁'),
+  centerSelected: icon('pin-center pin-center-selected', '🏁'),
 };
 
 function Recenter({ center }) {
@@ -28,8 +30,21 @@ function ClickHandler({ onClick }) {
 /**
  * Carte des moniteurs façon Uber.
  * markers : [{ id, lat, lng, online, label }]
+ * examCenters : centres d'examen [{ id, lat, lng, name, address, directionsUrl }]
  */
-export default function MapView({ center, me, markers = [], selectedId, onSelect, onMapClick, zoom = 12, height = '42vh' }) {
+export default function MapView({
+  center,
+  me,
+  markers = [],
+  examCenters = [],
+  selectedCenterId,
+  onSelectCenter,
+  selectedId,
+  onSelect,
+  onMapClick,
+  zoom = 12,
+  height = '42vh',
+}) {
   return (
     <div className="map-wrap" style={{ height }}>
       <MapContainer center={[center.lat, center.lng]} zoom={zoom} scrollWheelZoom className="map">
@@ -44,6 +59,24 @@ export default function MapView({ center, me, markers = [], selectedId, onSelect
             <Tooltip>Point de prise en charge</Tooltip>
           </Marker>
         )}
+        {examCenters.map((c) => (
+          <Marker
+            key={`center-${c.id}`}
+            position={[c.lat, c.lng]}
+            icon={c.id === selectedCenterId ? ICONS.centerSelected : ICONS.center}
+            eventHandlers={{ click: () => onSelectCenter?.(c.id) }}
+          >
+            <Popup>
+              <strong>Centre d’examen {c.name}</strong>
+              <br />
+              {c.address}
+              <br />
+              <a href={c.directionsUrl} target="_blank" rel="noreferrer">
+                Itinéraire →
+              </a>
+            </Popup>
+          </Marker>
+        ))}
         {markers.map((m) => (
           <Marker
             key={m.id}

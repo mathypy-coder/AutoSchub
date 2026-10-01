@@ -9,6 +9,7 @@ import Book from './pages/student/Book.jsx';
 import Lessons from './pages/Lessons.jsx';
 import Theory from './pages/student/Theory.jsx';
 import Pack from './pages/student/Pack.jsx';
+import ExamCenters from './pages/ExamCenters.jsx';
 import Dashboard from './pages/instructor/Dashboard.jsx';
 import InstructorProfile from './pages/instructor/InstructorProfile.jsx';
 
@@ -16,6 +17,7 @@ const STUDENT_NAV = [
   { to: '/reserver', label: 'Réserver', icon: '🚗' },
   { to: '/lecons', label: 'Mes leçons', icon: '📅' },
   { to: '/theorie', label: 'Théorie', icon: '📝' },
+  { to: '/centres', label: 'Centres', icon: '🏁' },
   { to: '/pack', label: 'Mon pack', icon: '🎟️' },
   { to: '/profil', label: 'Profil', icon: '👤' },
 ];
@@ -23,6 +25,7 @@ const STUDENT_NAV = [
 const INSTRUCTOR_NAV = [
   { to: '/moniteur', label: 'Conduire', icon: '🟢' },
   { to: '/moniteur/lecons', label: 'Leçons', icon: '📅' },
+  { to: '/moniteur/centres', label: 'Centres', icon: '🏁' },
   { to: '/moniteur/profil', label: 'Profil', icon: '👤' },
 ];
 
@@ -58,6 +61,7 @@ export default function App() {
           <Route path="/moniteur" element={<Dashboard />} />
           <Route path="/moniteur/lecons" element={<Lessons />} />
           <Route path="/moniteur/profil" element={<InstructorProfile />} />
+          <Route path="/moniteur/centres" element={<ExamCenters />} />
           <Route path="*" element={<Navigate to="/moniteur" replace />} />
         </Routes>
       </Shell>
@@ -71,6 +75,7 @@ export default function App() {
         <Route path="/lecons" element={<Lessons />} />
         <Route path="/theorie" element={<Theory />} />
         <Route path="/pack" element={<Pack />} />
+        <Route path="/centres" element={<ExamCenters />} />
         <Route path="/profil" element={<Profile />} />
         <Route path="*" element={<Navigate to="/reserver" replace />} />
       </Routes>

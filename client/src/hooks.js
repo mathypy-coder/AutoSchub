@@ -30,12 +30,12 @@ export function usePolling(path, intervalMs = 5000) {
   return { data, error, refresh };
 }
 
-export function usePosition() {
-  const [position, setPosition] = useState(BRUSSELS);
-  const [located, setLocated] = useState(false);
+export function usePosition(initial = null) {
+  const [position, setPosition] = useState(initial ?? BRUSSELS);
+  const [located, setLocated] = useState(Boolean(initial));
 
   useEffect(() => {
-    if (!navigator.geolocation) return;
+    if (initial || !navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setPosition({ lat: pos.coords.latitude, lng: pos.coords.longitude });
@@ -44,7 +44,7 @@ export function usePosition() {
       () => {},
       { enableHighAccuracy: false, timeout: 8000 },
     );
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return { position, setPosition, located };
 }

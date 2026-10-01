@@ -6,6 +6,7 @@ import { PERMITS, PERMIT_GROUPS } from './data/permits.js';
 import { errorHandler } from './errors.js';
 import { authRoutes } from './routes/auth.js';
 import { bookingRoutes } from './routes/bookings.js';
+import { examCenterRoutes } from './routes/examCenters.js';
 import { instructorRoutes } from './routes/instructors.js';
 import { subscriptionRoutes } from './routes/subscriptions.js';
 import { theoryRoutes } from './routes/theory.js';
@@ -24,6 +25,7 @@ export function createApp(db) {
   app.use('/api/bookings', bookingRoutes(db));
   app.use('/api/theory', theoryRoutes(db));
   app.use('/api/subscriptions', subscriptionRoutes(db));
+  app.use('/api/exam-centers', examCenterRoutes());
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Route inconnue.' }));
 
   // En production, le serveur sert aussi l'application web compilée.
