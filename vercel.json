@@ -2,12 +2,20 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "installCommand": "npm install",
   "buildCommand": "npm run build",
-  "outputDirectory": "client/dist",
+  "outputDirectory": "dist",
   "functions": {
-    "api/index.js": { "includeFiles": "server/src/**" }
+    "api/index.js": {
+      "includeFiles": "server/src/**"
+    }
   },
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api" },
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
+    {
+      "source": "/api/(.*)",
+      "destination": "/api"
+    },
+    {
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
+    }
   ]
 }

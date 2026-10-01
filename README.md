@@ -61,7 +61,7 @@ Variables d’environnement : `PORT` (3001), `DB_FILE` (`data/autoschub.db`, bas
 
 ## Déployer sur Vercel
 
-`vercel.json` est fourni : le site compilé est servi depuis `client/dist` et l’API Express tourne comme
+`vercel.json` est fourni : le site compilé est copié dans `dist/` (dossier attendu par Vercel) et l’API Express tourne comme
 fonction serverless (`api/index.js`).
 
 Vercel lance plusieurs instances éphémères de l’API : les données doivent donc vivre dans une **base hébergée**,
