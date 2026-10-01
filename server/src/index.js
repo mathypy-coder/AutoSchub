@@ -1,9 +1,9 @@
 import { createApp } from './app.js';
 import { openDb } from './db.js';
-import { seedIfEmpty } from './seed.js';
+import { seedDemo } from './seed.js';
 
 const db = await openDb();
-if (process.env.SEED !== '0') await seedIfEmpty(db);
+await seedDemo(db);
 
 const port = Number(process.env.PORT) || 3001;
 createApp(db).listen(port, () => {

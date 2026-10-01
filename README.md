@@ -50,12 +50,14 @@ npm run build
 AUTH_SECRET=une-longue-valeur-secrète npm start
 ```
 
-Comptes de démo (mot de passe `demo1234`) : `eleve@autoschub.be` et `moniteur@autoschub.be`
+Comptes de démo (mot de passe `demo1234`) : `eleve@autoschub.be` (sans pack), `eleve.pack@autoschub.be`
+(pack Intégral permis B déjà avancé : théorie réussie, permis provisoire, 8 h de conduite, une leçon à venir)
+et `moniteur@autoschub.be`
 (10 moniteurs répartis à Bruxelles, Gand, Anvers, Liège, Namur, Charleroi, Mons, Eupen…).
 
 Variables d’environnement : `PORT` (3001), `DB_FILE` (`data/autoschub.db`, base locale),
 `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN` (base hébergée, prioritaire sur `DB_FILE`), `AUTH_SECRET`
-(aléatoire par défaut — les sessions sont alors perdues au redémarrage), `SEED=0` pour désactiver la démo.
+(aléatoire par défaut — les sessions sont alors perdues au redémarrage), `SEED=0` pour désactiver la démo, `DEMO_PACK=0` pour ne pas créer l’élève avec pack.
 
 ## Déployer sur Vercel
 

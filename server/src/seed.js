@@ -107,6 +107,91 @@ export async function seedIfEmpty(db) {
   }
 }
 
+export const DEMO_PACK_EMAIL = 'eleve.pack@autoschub.be';
+
+const daysFromNow = (days, hour = 10) => {
+  const date = new Date(Date.now() + days * 86400000);
+  date.setUTCHours(hour, 0, 0, 0);
+  return date.toISOString();
+};
+const sqliteDate = (iso) => iso.slice(0, 19).replace('T', ' ');
+
+/**
+ * Élève de démo avec un pack Intégral (permis B) déjà bien avancé : théorie réussie,
+ * permis provisoire, leçons passées (notées, avec retours) et une leçon à venir.
+ * Ajouté une seule fois, même sur une base existante.
+ */
+export async function seedDemoPack(db) {
+  if (await db.get('SELECT 1 FROM users WHERE email = ?', DEMO_PACK_EMAIL)) return false;
+  const sophie = await db.get(`SELECT id FROM users WHERE email = 'moniteur@autoschub.be'`);
+  const lucas = await db.get(`SELECT id FROM users WHERE email = 'lucas.martin@autoschub.be'`);
+  if (!sophie || !lucas) return false;
+
+  await db.transaction(async (tx) => {
+    const { lastInsertRowid: studentId } = await tx.run(
+      INSERT_USER, 'student', 'Noah', 'Dubois', DEMO_PACK_EMAIL, hashPassword(DEMO_PASSWORD), '+32 470 00 00 02', 'Bruxelles',
+    );
+
+    // Abonnement souscrit il y a 45 jours : on est dans la 2e période mensuelle.
+    const createdAt = daysFromNow(-45, 9);
+    const periodStart = new Date(Date.parse(createdAt) + 30 * 86400000).toISOString();
+    const periodEnd = new Date(Date.parse(periodStart) + 30 * 86400000).toISOString();
+    const { lastInsertRowid: subId } = await tx.run(
+      `INSERT INTO subscriptions (student_id, plan_id, category, current_period_start, current_period_end,
+         provisional_at, created_at)
+       VALUES (?, 'integral', 'B', ?, ?, ?, ?)`,
+      studentId, periodStart, periodEnd, daysFromNow(-30).slice(0, 10), createdAt,
+    );
+
+    // Théorie : un examen blanc raté, puis réussi.
+    for (const [days, score, passed] of [[-42, 33, 0], [-38, 42, 1]]) {
+      await tx.run(
+        `INSERT INTO theory_attempts (user_id, category, mode, score, max_score, correct, total, grave_faults, passed, created_at)
+         VALUES (?, 'B', 'exam', ?, 44, ?, 44, ?, ?, ?)`,
+        studentId, score, score + (passed ? 1 : 3), passed ? 0 : 2, passed, sqliteDate(daysFromNow(days)),
+      );
+    }
+
+    // Leçons : [jours, moniteur, tarif €/h, durée, statut, note, retour, période du pack]
+    const lessons = [
+      [-28, sophie.id, 58, 120, 'completed', 5, 'Bonne prise en main. Travailler les rétroviseurs avant chaque changement de direction.', createdAt],
+      [-21, sophie.id, 58, 120, 'completed', 5, 'Démarrages en côte maîtrisés. Prochaine fois : ronds-points.', createdAt],
+      [-14, lucas.id, 50, 120, 'completed', 4, 'Ronds-points corrects, attention à la priorité de droite en zone 30.', createdAt],
+      [-5, sophie.id, 58, 120, 'completed', 5, 'Très bon trajet en ville. On peut viser l’examen d’ici 3 à 4 leçons.', periodStart],
+      [2, sophie.id, 58, 120, 'accepted', null, null, periodStart],
+    ];
+    for (const [days, instructorId, rate, duration, status, rating, feedback, period] of lessons) {
+      await tx.run(
+        `INSERT INTO bookings (student_id, instructor_id, category, start_at, duration_min, pickup_address, pickup_lat,
+           pickup_lng, status, price_cents, student_price_cents, covered_minutes, subscription_id, subscription_period,
+           student_rating, instructor_feedback)
+         VALUES (?, ?, 'B', ?, ?, 'Rue de la Loi 16, 1000 Bruxelles', 50.8466, 4.3669, ?, ?, 0, ?, ?, ?, ?, ?)`,
+        studentId, instructorId, daysFromNow(days), duration, status, rate * duration * (100 / 60), duration, subId,
+        period, rating, feedback,
+      );
+      if (rating) {
+        await tx.run(
+          'UPDATE instructors SET rating_sum = rating_sum + ?, rating_count = rating_count + 1 WHERE user_id = ?',
+          rating, instructorId,
+        );
+      }
+    }
+  });
+  return true;
+}
+
+// Données de démo au démarrage : comptes de base, puis élève avec pack (désactivable avec DEMO_PACK=0).
+export async function seedDemo(db) {
+  if (process.env.SEED === '0') return;
+  await seedIfEmpty(db);
+  if (process.env.DEMO_PACK === '0') return;
+  try {
+    if (await seedDemoPack(db)) console.log(`Élève de démo avec pack créé : ${DEMO_PACK_EMAIL}.`);
+  } catch (err) {
+    if (!/UNIQUE|SQLITE_BUSY|locked/i.test(String(err?.message))) throw err;
+  }
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  await seedIfEmpty(await openDb());
+  await seedDemo(await openDb());
 }

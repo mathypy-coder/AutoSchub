@@ -5,6 +5,7 @@ import { ErrorMessage } from '../components/ui.jsx';
 
 const DEMO_ACCOUNTS = [
   { label: 'Démo élève', email: 'eleve@autoschub.be' },
+  { label: 'Démo élève avec pack', email: 'eleve.pack@autoschub.be' },
   { label: 'Démo moniteur', email: 'moniteur@autoschub.be' },
 ];
 
@@ -56,7 +57,7 @@ export default function Login() {
 
       <div className="demo-box">
         <p className="muted">Essayer avec un compte de démonstration :</p>
-        <div className="row">
+        <div className="row wrap">
           {DEMO_ACCOUNTS.map((d) => (
             <button
               key={d.email}

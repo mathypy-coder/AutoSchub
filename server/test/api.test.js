@@ -2,7 +2,8 @@ import { after, before, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createApp } from '../src/app.js';
 import { openDb } from '../src/db.js';
-import { DEMO_PASSWORD, seed } from '../src/seed.js';
+import { DEMO_PASSWORD, DEMO_PACK_EMAIL, seed, seedDemoPack } from '../src/seed.js';
+import { buildJourney, getActiveSubscription, serializeSubscription } from '../src/subscriptions.js';
 import { gradeAnswers } from '../src/routes/theory.js';
 
 let server;
@@ -311,5 +312,27 @@ describe('centres d’examen', () => {
       assert.ok(data.centers[i - 1].distanceKm <= data.centers[i].distanceKm);
     }
     assert.ok(data.centers[0].directionsUrl.startsWith('https://www.google.com/maps/dir/'));
+  });
+});
+
+describe('démo avec pack', () => {
+  test('élève de démo avec un pack Intégral avancé, ajouté une seule fois', async () => {
+    const demoDb = await openDb(':memory:');
+    await seed(demoDb);
+    assert.equal(await seedDemoPack(demoDb), true);
+    assert.equal(await seedDemoPack(demoDb), false);
+
+    const student = await demoDb.get('SELECT id FROM users WHERE email = ?', DEMO_PACK_EMAIL);
+    const sub = await getActiveSubscription(demoDb, student.id);
+    const summary = await serializeSubscription(demoDb, sub);
+    assert.equal(summary.plan.id, 'integral');
+    assert.equal(summary.remainingMinutes, 120); // 6 h incluses − 2 h faites − 2 h à venir
+
+    const steps = Object.fromEntries((await buildJourney(demoDb, sub)).steps.map((step) => [step.id, step]));
+    assert.equal(steps.theory.done, true);
+    assert.equal(steps.provisional.done, true);
+    assert.ok(steps.driving.detail.startsWith('8 h sur 20 h'));
+    assert.equal(steps.exam.done, false);
+    demoDb.close();
   });
 });
