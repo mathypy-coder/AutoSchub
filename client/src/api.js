@@ -29,6 +29,8 @@ export async function api(path, { method = 'GET', body, auth = true } = {}) {
     body: body ? JSON.stringify(body) : undefined,
   });
   const data = await res.json().catch(() => ({}));
+  // Connexion refusée par le serveur (session expirée, nouveau déploiement…).
+  if (res.status === 401 && token) window.dispatchEvent(new Event('autoschub:session-expired'));
   if (!res.ok) throw new Error([data.error || `Erreur ${res.status}`, data.detail].filter(Boolean).join(' — '));
   return data;
 }

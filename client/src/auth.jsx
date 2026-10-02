@@ -6,6 +6,17 @@ const AuthContext = createContext(null);
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(Boolean(getToken()));
+  const [notice, setNotice] = useState('');
+
+  useEffect(() => {
+    const expire = () => {
+      setToken(null);
+      setUser(null);
+      setNotice('Ta session a expiré. Reconnecte-toi pour continuer.');
+    };
+    window.addEventListener('autoschub:session-expired', expire);
+    return () => window.removeEventListener('autoschub:session-expired', expire);
+  }, []);
 
   useEffect(() => {
     if (!getToken()) return;
@@ -19,12 +30,14 @@ export function AuthProvider({ children }) {
     const { token, user: me } = await api(path, { method: 'POST', body });
     setToken(token);
     setUser(me);
+    setNotice('');
     return me;
   }, []);
 
   const value = {
     user,
     loading,
+    notice,
     login: (email, password) => authenticate('/auth/login', { email, password }),
     register: (payload) => authenticate('/auth/register', payload),
     logout: () => {

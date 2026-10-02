@@ -1,12 +1,15 @@
 import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 
-// Le secret doit être identique sur toutes les instances (Vercel en lance plusieurs).
-// À défaut d'AUTH_SECRET, on le dérive du jeton Turso, lui aussi secret et stable.
+// Le secret doit être identique sur toutes les instances (Vercel en lance plusieurs),
+// sinon une connexion faite sur une instance est refusée par une autre (« Authentification requise »).
+// Ordre : AUTH_SECRET, puis dérivé du jeton Turso, puis secret généré au build de la
+// fonction Vercel (commun à toutes ses instances, renouvelé à chaque déploiement).
 function resolveSecret() {
   if (process.env.AUTH_SECRET) return process.env.AUTH_SECRET;
   if (process.env.TURSO_AUTH_TOKEN) {
     return createHash('sha256').update(`autoschub-auth:${process.env.TURSO_AUTH_TOKEN}`).digest('hex');
   }
+  if (process.env.AUTOSCHUB_BUILD_SECRET) return process.env.AUTOSCHUB_BUILD_SECRET;
   if (process.env.VERCEL) {
     console.warn('AUTH_SECRET non défini : les connexions ne survivront pas aux redémarrages des fonctions.');
   }

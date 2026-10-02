@@ -931,3 +931,11 @@ textarea:focus {
   font-size: 0.7rem;
   min-width: 0;
 }
+
+.notice {
+  background: #fef3c7;
+  color: #92400e;
+  padding: 0.6rem 0.8rem;
+  border-radius: 10px;
+  font-size: 0.9rem;
+}

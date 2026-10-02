@@ -3,6 +3,7 @@
 // (préréglage de framework, « Output Directory », vercel.json ignoré, ou
 // « Root Directory » = client). Ne fait rien en dehors d'un build Vercel.
 import { execSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
@@ -57,6 +58,9 @@ await build({
   banner: {
     js: "import { createRequire as __createRequire } from 'node:module'; const require = __createRequire(import.meta.url);",
   },
+  // Secret de connexion commun à toutes les instances de ce déploiement (voir server/src/auth.js).
+  // Il reste dans le code serveur : jamais envoyé aux navigateurs.
+  define: { 'process.env.AUTOSCHUB_BUILD_SECRET': JSON.stringify(randomBytes(32).toString('hex')) },
   logLevel: 'warning',
 });
 writeFileSync(

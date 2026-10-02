@@ -10,7 +10,7 @@ const DEMO_ACCOUNTS = [
 ];
 
 export default function Login() {
-  const { login } = useAuth();
+  const { login, notice } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -34,6 +34,7 @@ export default function Login() {
         ← Retour
       </Link>
       <h1>Connexion</h1>
+      {notice && <p className="notice">{notice}</p>}
       <form onSubmit={submit} className="form">
         <label>
           E-mail

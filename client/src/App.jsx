@@ -45,7 +45,7 @@ function Shell({ nav, children }) {
 }
 
 export default function App() {
-  const { user, loading } = useAuth();
+  const { user, loading, notice } = useAuth();
 
   if (loading) return <div className="splash">AutoSchub</div>;
 
@@ -55,7 +55,7 @@ export default function App() {
         <Route path="/" element={<Welcome />} />
         <Route path="/connexion" element={<Login />} />
         <Route path="/inscription" element={<Register />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<Navigate to={notice ? '/connexion' : '/'} replace />} />
       </Routes>
     );
   }
