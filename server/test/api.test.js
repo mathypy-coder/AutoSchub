@@ -153,11 +153,11 @@ describe('théorie', () => {
     assert.ok(quiz.data.questions.length > 20);
     assert.ok(quiz.data.questions.every((q) => q.answer === undefined));
 
-    const questionIds = quiz.data.questions.map((q) => q.id);
+    assert.ok(quiz.data.questions.every((q) => q.grave === undefined)); // gravité cachée en examen
     const result = await api('/api/theory/submit', {
       method: 'POST',
       token,
-      body: { category: 'B', mode: 'exam', questionIds, answers: {} },
+      body: { quizToken: quiz.data.quizToken, answers: {} },
     });
     assert.equal(result.data.score, 0);
     assert.equal(result.data.passed, false);
@@ -210,7 +210,7 @@ describe('packs d’abonnement', () => {
       assert.equal(quiz.status, 200);
       await api('/api/theory/submit', {
         method: 'POST', token,
-        body: { category: 'B', mode: 'exam', questionIds: quiz.data.questions.map((q) => q.id), answers: {} },
+        body: { quizToken: quiz.data.quizToken, answers: {} },
       });
     }
     assert.equal((await api('/api/theory/quiz?category=B&mode=exam', { token })).status, 402);
@@ -282,11 +282,195 @@ describe('packs d’abonnement', () => {
     const cancel = await api('/api/subscriptions/me/cancel', { method: 'POST', token, body: {} });
     assert.equal(cancel.data.subscription.cancelAtPeriodEnd, true);
 
+    const impossible = await api('/api/subscriptions/me/journey', { method: 'PATCH', token, body: { examDate: '2026-13-45' } });
+    assert.equal(impossible.status, 400);
+
+    // Permis obtenu : plus de renouvellement, le pack reste actif jusqu'à la fin du mois payé.
+    await api('/api/subscriptions/me/cancel', { method: 'POST', token, body: { resume: true } });
     const done = await api('/api/subscriptions/me/journey', {
       method: 'PATCH', token, body: { licenseObtainedAt: '2026-12-15' },
     });
-    assert.equal(done.data.subscription.status, 'completed');
+    assert.equal(done.data.subscription.status, 'active');
+    assert.equal(done.data.subscription.cancelAtPeriodEnd, true);
+    assert.equal(done.data.subscription.licenseObtained, true);
+    const again = await api('/api/subscriptions', { method: 'POST', token, body: { planId: 'integral', category: 'B' } });
+    assert.equal(again.status, 409);
+
+    await db.run(
+      'UPDATE subscriptions SET current_period_end = ? WHERE id = ?',
+      new Date(Date.now() - 1000).toISOString(),
+      done.data.subscription.id,
+    );
     assert.equal((await api('/api/subscriptions/me', { token })).data.subscription, null);
+    const closed = await db.get('SELECT status FROM subscriptions WHERE id = ?', done.data.subscription.id);
+    assert.equal(closed.status, 'completed');
+  });
+});
+
+describe('corrections de la revue', () => {
+  const register = async (email, extra = {}) =>
+    api('/api/auth/register', {
+      method: 'POST',
+      body: { role: 'student', firstName: 'R', lastName: 'Test', email, password: 'motdepasse', ...extra },
+    });
+
+  test('examen blanc : seulement un quiz délivré par le serveur, une fois, par son destinataire', async () => {
+    const token = (await register('forge@test.be')).data.token;
+    const other = (await register('autre@test.be')).data.token;
+    const { QUESTIONS } = await import('../src/data/questions.js');
+    const q = QUESTIONS.find((x) => x.categories.includes('B'));
+
+    // Ancien format (questions choisies par le client) : refusé.
+    const forged = await api('/api/theory/submit', {
+      method: 'POST', token,
+      body: { category: 'B', mode: 'exam', questionIds: [q.id], answers: { [q.id]: q.answer } },
+    });
+    assert.equal(forged.status, 400);
+
+    const quiz = await api('/api/theory/quiz?category=B&mode=exam', { token });
+    const body = { quizToken: quiz.data.quizToken, answers: {} };
+    assert.equal((await api('/api/theory/submit', { method: 'POST', token: other, body })).status, 403);
+    assert.equal((await api('/api/theory/submit', { method: 'POST', token, body })).status, 200);
+    assert.equal((await api('/api/theory/submit', { method: 'POST', token, body })).status, 409);
+
+    // Jeton altéré : refusé. Jeton de quiz utilisé comme session : refusé.
+    const [payload, sig] = quiz.data.quizToken.split('.');
+    const data = JSON.parse(Buffer.from(payload, 'base64url').toString());
+    const tampered = `${Buffer.from(JSON.stringify({ ...data, ids: [q.id] })).toString('base64url')}.${sig}`;
+    assert.equal((await api('/api/theory/submit', { method: 'POST', token, body: { quizToken: tampered } })).status, 400);
+    assert.equal((await api('/api/auth/me', { token: quiz.data.quizToken })).status, 401);
+
+    // Quota revérifié à la correction : deux quiz ouverts d'avance ne donnent pas un 3e examen.
+    const q2 = await api('/api/theory/quiz?category=B&mode=exam', { token });
+    const q3 = await api('/api/theory/quiz?category=B&mode=exam', { token });
+    assert.equal((await api('/api/theory/submit', { method: 'POST', token, body: { quizToken: q2.data.quizToken } })).status, 200);
+    assert.equal((await api('/api/theory/submit', { method: 'POST', token, body: { quizToken: q3.data.quizToken } })).status, 402);
+  });
+
+  test('inscription moniteur : tarif, position et langues validés', async () => {
+    const base = { categories: ['B'], approvalNumber: 'AGR-1', lat: 50.85, lng: 4.35 };
+    const reg = (email, instructor) => register(email, { role: 'instructor', instructor: { ...base, ...instructor } });
+    assert.equal((await reg('neg@test.be', { hourlyRate: -40 })).status, 400);
+    assert.equal((await reg('pos@test.be', { lat: 'abc' })).status, 400);
+    assert.equal((await reg('lang@test.be', { languages: ['klingon'] })).status, 400);
+    assert.equal((await register('num@test.be', { firstName: 42 })).status, 400);
+    const ok = await reg('ok@test.be', { hourlyRate: 60, languages: ['nl', 'fr'] });
+    assert.equal(ok.status, 201);
+    const profile = await api('/api/instructors/me/profile', { token: ok.data.token });
+    assert.equal(profile.data.instructor.hourlyRate, 60);
+  });
+
+  test('connexion bloquée après 10 échecs', async () => {
+    await register('brute@test.be');
+    const attempt = (password) =>
+      api('/api/auth/login', { method: 'POST', body: { email: 'brute@test.be', password } });
+    for (let i = 0; i < 10; i += 1) assert.equal((await attempt('mauvais')).status, 401);
+    assert.equal((await attempt('mauvais')).status, 429);
+    assert.equal((await attempt('motdepasse')).status, 429);
+    await db.run('DELETE FROM login_attempts');
+    assert.equal((await attempt('motdepasse')).status, 200);
+  });
+
+  test('statut et note : une seule mise à jour gagne en cas de requêtes simultanées', async () => {
+    const student = (await register('race@test.be')).data.token;
+    const instructor = await login('moniteur@autoschub.be');
+    const { data: list } = await api('/api/instructors?category=B');
+    const sophie = list.instructors.find((i) => i.firstName === 'Sophie');
+    const startAt = new Date(Date.now() + 20 * 86400000).toISOString();
+    const created = await api('/api/bookings', {
+      method: 'POST', token: student,
+      body: { instructorId: sophie.id, category: 'B', pickupAddress: 'Rue X', startAt },
+    });
+    const id = created.data.booking.id;
+
+    // L'élève annule pendant que le moniteur refuse : une seule des deux transitions est appliquée.
+    const [decline, cancel] = await Promise.all([
+      api(`/api/bookings/${id}/status`, { method: 'POST', token: instructor, body: { status: 'declined' } }),
+      api(`/api/bookings/${id}/status`, { method: 'POST', token: student, body: { status: 'cancelled' } }),
+    ]);
+    assert.deepEqual([decline.status, cancel.status].sort(), [200, 409]);
+
+    await db.run(`UPDATE bookings SET status = 'completed' WHERE id = ?`, id);
+    const before = await db.get('SELECT rating_count FROM instructors WHERE user_id = ?', sophie.id);
+    const reviews = await Promise.all(
+      [1, 2, 3].map(() => api(`/api/bookings/${id}/review`, { method: 'POST', token: student, body: { rating: 4 } })),
+    );
+    assert.deepEqual(reviews.map((r) => r.status).sort(), [200, 409, 409]);
+    const after = await db.get('SELECT rating_count FROM instructors WHERE user_id = ?', sophie.id);
+    assert.equal(after.rating_count, before.rating_count + 1);
+  });
+
+  test('un élève ne peut pas réserver deux leçons au même moment', async () => {
+    const student = (await register('double@test.be')).data.token;
+    const { data: list } = await api('/api/instructors?category=B&maxKm=500');
+    const [a, b] = list.instructors;
+    const startAt = new Date(Date.now() + 30 * 86400000).toISOString();
+    const book = (instructorId) =>
+      api('/api/bookings', {
+        method: 'POST', token: student,
+        body: { instructorId, category: 'B', pickupAddress: 'Rue Y', startAt },
+      });
+    assert.equal((await book(a.id)).status, 201);
+    const clash = await book(b.id);
+    assert.equal(clash.status, 409);
+    assert.match(clash.data.error, /déjà une leçon/);
+  });
+
+  test('demandes sans réponse expirées : créneau libéré', async () => {
+    const student = (await register('expire@test.be')).data.token;
+    const { data: list } = await api('/api/instructors?category=B');
+    const sophie = list.instructors.find((i) => i.firstName === 'Sophie');
+    const startAt = new Date(Date.now() + 40 * 86400000).toISOString();
+    const body = { instructorId: sophie.id, category: 'B', pickupAddress: 'Rue Z', startAt };
+    const first = await api('/api/bookings', { method: 'POST', token: student, body });
+    // Demande dont l'heure de début est passée sans réponse du moniteur.
+    await db.run('UPDATE bookings SET start_at = ? WHERE id = ?', new Date(Date.now() - 60000).toISOString(), first.data.booking.id);
+    const mine = await api('/api/bookings', { token: student });
+    assert.equal(mine.data.bookings.find((x) => x.id === first.data.booking.id).status, 'expired');
+    assert.equal((await api('/api/bookings', { method: 'POST', token: student, body })).status, 201);
+  });
+
+  test('changement de formule appliqué au renouvellement', async () => {
+    const token = (await register('upgrade@test.be')).data.token;
+    await api('/api/subscriptions', { method: 'POST', token, body: { planId: 'theorie', category: 'B' } });
+    const changed = await api('/api/subscriptions/me/plan', { method: 'POST', token, body: { planId: 'integral' } });
+    assert.equal(changed.data.subscription.plan.id, 'theorie');
+    assert.equal(changed.data.subscription.remainingMinutes, 0);
+    assert.equal(changed.data.subscription.pendingPlan.id, 'integral');
+
+    await db.run(
+      'UPDATE subscriptions SET current_period_end = ? WHERE id = ?',
+      new Date(Date.now() - 1000).toISOString(),
+      changed.data.subscription.id,
+    );
+    const renewed = await api('/api/subscriptions/me', { token });
+    assert.equal(renewed.data.subscription.plan.id, 'integral');
+    assert.equal(renewed.data.subscription.remainingMinutes, 360);
+    assert.equal(renewed.data.subscription.pendingPlan, null);
+  });
+
+  test('base locale : une requête faite pendant une transaction n’est pas annulée avec elle', async () => {
+    const local = await openDb(':memory:');
+    const failing = local.transaction(async (tx) => {
+      await tx.run(`INSERT INTO app_meta (key, value) VALUES ('tx', '1')`);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      throw new Error('rollback');
+    });
+    const outside = local.run(`INSERT INTO app_meta (key, value) VALUES ('outside', '1')`);
+    await assert.rejects(failing);
+    await outside;
+    assert.ok(await local.get(`SELECT 1 FROM app_meta WHERE key = 'outside'`));
+    assert.equal(await local.get(`SELECT 1 FROM app_meta WHERE key = 'tx'`), undefined);
+    local.close();
+  });
+
+  test('démo désactivée par défaut en production', async () => {
+    const { demoEnabled } = await import('../src/seed.js');
+    assert.equal(demoEnabled({}), true);
+    assert.equal(demoEnabled({ VERCEL: '1' }), false);
+    assert.equal(demoEnabled({ TURSO_DATABASE_URL: 'libsql://x' }), false);
+    assert.equal(demoEnabled({ VERCEL: '1', SEED: '1' }), true);
+    assert.equal(demoEnabled({ SEED: '0' }), false);
   });
 });
 

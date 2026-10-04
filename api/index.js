@@ -31,19 +31,18 @@ function restoreOriginalUrl(req) {
   req.url = `/api/${path.replace(/^\/+/, '')}${url.search}`;
 }
 
-// Cause lisible (sans secret) pour savoir quoi corriger dans les réglages Vercel.
+// Cause lisible pour savoir quoi corriger dans les réglages Vercel, sans le message brut
+// (qui peut contenir l'adresse de la base) : celui-ci reste dans les journaux du serveur.
 function describeInitError(err) {
-  const message = String(err?.message ?? err)
-    .replaceAll(process.env.TURSO_AUTH_TOKEN || '\u0000', '***')
-    .slice(0, 200);
-  if (!process.env.TURSO_DATABASE_URL) return `Base locale indisponible : ${message}`;
+  const message = String(err?.message ?? err);
+  if (!process.env.TURSO_DATABASE_URL) return 'Base locale indisponible.';
   if (/401|403|unauthori[sz]ed|forbidden|jwt|token/i.test(message)) {
-    return `Turso refuse la connexion : vérifie TURSO_AUTH_TOKEN (${message})`;
+    return 'Turso refuse la connexion : vérifie TURSO_AUTH_TOKEN.';
   }
   if (/fetch failed|ENOTFOUND|ECONNREFUSED|404|not found|invalid url|URL_INVALID/i.test(message)) {
-    return `Base Turso introuvable : vérifie TURSO_DATABASE_URL (${message})`;
+    return 'Base Turso introuvable : vérifie TURSO_DATABASE_URL.';
   }
-  return `Erreur Turso : ${message}`;
+  return 'Erreur Turso (détails dans les journaux de la fonction).';
 }
 
 export default async function handler(req, res) {

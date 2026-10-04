@@ -1,5 +1,6 @@
+import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
-import { requireAuth } from '../auth.js';
+import { createSignedToken, readToken, requireAuth } from '../auth.js';
 import { EXAM_RULES, THEORY_CATEGORIES } from '../data/permits.js';
 import { QUESTIONS } from '../data/questions.js';
 import { FREE_EXAMS_PER_WEEK } from '../data/plans.js';
@@ -17,6 +18,11 @@ function shuffle(list) {
   }
   return copy;
 }
+
+// Marge pour l'envoi des réponses après la fin du chrono (réseau, démarrage à froid…).
+const SUBMIT_GRACE_MS = 2 * 60 * 1000;
+const PRACTICE_TTL_MS = 6 * 3600 * 1000;
+const MAX_PRACTICE_QUESTIONS = 50;
 
 const forCategory = (category) => QUESTIONS.filter((q) => q.categories.includes(category));
 
@@ -99,46 +105,78 @@ export function theoryRoutes(db) {
     if (mode === 'practice' && theme) pool = pool.filter((q) => q.theme === theme);
     if (!pool.length) throw new HttpError(404, 'Aucune question pour cette sélection.');
 
-    const count = mode === 'exam' ? EXAM_RULES.questionCount : Number(req.query.count) || 10;
-    const questions = shuffle(pool)
-      .slice(0, count)
-      .map(({ id, theme: t, question, choices, grave }) => ({ id, theme: t, question, choices, grave }));
+    const count =
+      mode === 'exam'
+        ? EXAM_RULES.questionCount
+        : Math.min(MAX_PRACTICE_QUESTIONS, Math.max(1, Math.trunc(Number(req.query.count)) || 10));
+    const picked = shuffle(pool).slice(0, count);
+    const durationMinutes = mode === 'exam' ? EXAM_RULES.durationMinutes : null;
+
+    // Le quiz est signé par le serveur : la correction ne porte que sur ces questions,
+    // pour cet utilisateur, une seule fois et dans le temps imparti.
+    const quizToken = createSignedToken({
+      typ: 'quiz',
+      jti: randomUUID(),
+      uid: req.user?.id ?? null,
+      category,
+      mode,
+      theme: mode === 'practice' ? (theme ?? null) : null,
+      ids: picked.map((q) => q.id),
+      exp: Date.now() + (durationMinutes ? durationMinutes * 60000 + SUBMIT_GRACE_MS : PRACTICE_TTL_MS),
+    });
 
     res.json({
       category,
       mode,
       theme: mode === 'practice' ? (theme ?? null) : null,
-      durationMinutes: mode === 'exam' ? EXAM_RULES.durationMinutes : null,
-      questions,
+      durationMinutes,
+      quizToken,
+      // En examen, la gravité des questions n'est révélée qu'à la correction.
+      questions: picked.map(({ id, theme: t, question, choices, grave }) => ({
+        id,
+        theme: t,
+        question,
+        choices,
+        ...(mode === 'practice' ? { grave } : {}),
+      })),
     });
   });
 
   router.post('/submit', async (req, res) => {
-    const { category, mode = 'practice', theme = null, answers = {} } = req.body ?? {};
-    if (!THEORY_CODES.includes(category)) throw new HttpError(400, 'Catégorie théorique invalide.');
-    const ids = Object.keys(answers);
-    if (Array.isArray(req.body?.questionIds)) ids.splice(0, ids.length, ...req.body.questionIds);
-    const questions = ids.map((id) => QUESTIONS_BY_ID.get(id));
-    if (!questions.length || questions.some((q) => !q || !q.categories.includes(category))) {
-      throw new HttpError(400, 'Questions invalides pour cette catégorie.');
-    }
+    const quiz = readToken(req.body?.quizToken, 'quiz');
+    if (!quiz) throw new HttpError(400, 'Quiz expiré ou invalide. Relance un nouveau quiz.');
+    if (quiz.uid !== (req.user?.id ?? null)) throw new HttpError(403, 'Ce quiz a été délivré à un autre compte.');
+    const questions = quiz.ids.map((id) => QUESTIONS_BY_ID.get(id));
+    if (!questions.length || questions.some((q) => !q)) throw new HttpError(400, 'Questions invalides.');
+    const raw = req.body?.answers;
+    const answers = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+
+    // Quota revérifié à la correction (plusieurs quiz ont pu être ouverts avant d'en rendre un).
+    if (quiz.mode === 'exam') await assertExamAllowed(db, req.user);
 
     const result = gradeAnswers(questions, answers);
     if (req.user) {
-      await db.run(
-        `INSERT INTO theory_attempts (user_id, category, mode, theme, score, max_score, correct, total, grave_faults, passed)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        req.user.id,
-        category,
-        mode === 'exam' ? 'exam' : 'practice',
-        theme,
-        result.score,
-        result.maxScore,
-        result.correct,
-        result.total,
-        result.graveFaults,
-        result.passed ? 1 : 0,
-      );
+      try {
+        await db.run(
+          `INSERT INTO theory_attempts (user_id, category, mode, theme, score, max_score, correct, total, grave_faults,
+             passed, quiz_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          req.user.id,
+          quiz.category,
+          quiz.mode,
+          quiz.theme,
+          result.score,
+          result.maxScore,
+          result.correct,
+          result.total,
+          result.graveFaults,
+          result.passed ? 1 : 0,
+          quiz.jti,
+        );
+      } catch (err) {
+        if (/UNIQUE/i.test(String(err?.message))) throw new HttpError(409, 'Ce quiz a déjà été corrigé.');
+        throw err;
+      }
     }
     res.json(result);
   });

@@ -13,6 +13,10 @@ avec un module de **théorie** intégré.
   (2 par semaine sans pack) et **suivi du parcours complet** — théorie réussie, permis provisoire, heures de conduite
   vs objectif, examen pratique planifié, permis obtenu — avec conseil sur la prochaine étape et moniteur référent.
   Le moniteur est toujours payé au prix plein de la leçon ; le paiement de l’abonnement est simulé.
+  Un changement de formule prend effet au renouvellement suivant ; déclarer le permis obtenu arrête le
+  renouvellement et le pack se termine à la fin du mois en cours.
+- **Demandes sans réponse** : une demande « maintenant » expire après 15 min, une demande planifiée à son heure de
+  début ; le créneau est libéré et les heures du pack rendues.
 - **Centres d’examen** : les 32 centres agréés (2 à Bruxelles, 14 en Wallonie, 16 en Flandre) affichés sur la carte
   de réservation, et un onglet de recherche (ville, code postal, opérateur, Région, tri par distance) avec itinéraire,
   lien de prise de rendez-vous et réservation d’une leçon près du centre. Coordonnées GPS approximatives.
@@ -57,7 +61,12 @@ et `moniteur@autoschub.be`
 
 Variables d’environnement : `PORT` (3001), `DB_FILE` (`data/autoschub.db`, base locale),
 `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN` (base hébergée, prioritaire sur `DB_FILE`), `AUTH_SECRET`
-(aléatoire par défaut — les sessions sont alors perdues au redémarrage), `SEED=0` pour désactiver la démo, `DEMO_PACK=0` pour ne pas créer l’élève avec pack.
+(aléatoire par défaut — les sessions sont alors perdues au redémarrage), `SEED=0` / `SEED=1` pour désactiver / forcer la démo,
+`DEMO_PACK=0` pour ne pas créer l’élève avec pack, `TRUST_PROXY=1` derrière un proxy de confiance (adresse IP du client,
+utilisée pour limiter les tentatives de connexion ; automatique sur Vercel).
+
+Les comptes de démo ont un mot de passe public : ils sont créés par défaut **en local uniquement**. En production
+(Vercel ou base Turso), il faut les demander avec `SEED=1`, à réserver à une instance de démonstration.
 
 ## Déployer sur Vercel
 
@@ -74,8 +83,9 @@ sinon packs, leçons et inscriptions disparaissent ou n’apparaissent que par m
    - `TURSO_DATABASE_URL` = l’URL `libsql://…`
    - `TURSO_AUTH_TOKEN` = le jeton
    - (facultatif) `AUTH_SECRET` = une longue chaîne aléatoire ; sinon il est dérivé du jeton Turso.
-3. Redéploie. Les tables et les comptes de démo sont créés automatiquement au premier appel
-   (`SEED=0` pour ne pas créer la démo).
+3. Redéploie. Les tables sont créées automatiquement au premier appel. Les comptes de démo ne sont
+   créés que si `SEED=1` (instance de démonstration uniquement : leur mot de passe est public).
+   Une base qui les contient déjà les garde : supprime-les si l’instance sert de vrais élèves.
 
 Le build génère aussi directement la sortie finale de Vercel (`.vercel/output`, « Build Output API » :
 site, fonction API compilée avec esbuild et routage). Le déploiement fonctionne donc même si le projet
@@ -95,8 +105,8 @@ Optimisations incluses :
   de théorie servis par le CDN de Vercel sans réveiller la fonction.
 - **Front** : écrans et carte chargés à la demande ; rafraîchissement automatique en pause quand
   l’onglet est caché.
-- **Diagnostic** : `/api/health` indique la base utilisée (`turso` ou `locale`), si le secret
-  d’authentification est configuré et la région Vercel.
+- **Diagnostic** : `/api/health` indique la base utilisée (`turso` ou `locale`), l’origine du secret
+  d’authentification (`AUTH_SECRET`, `turso`, `build` ou `aléatoire`) et la région Vercel.
 
 ## Tests
 

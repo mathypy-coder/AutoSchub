@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import { requireAuth } from '../auth.js';
-import { PERMIT_CODES } from '../data/permits.js';
 import { DEFAULT_POSITION } from '../geo.js';
 import { HttpError } from '../errors.js';
 import { centsToEuros, rating, serializeInstructor } from '../serializers.js';
+import { expireStaleBookings } from '../bookingRules.js';
+import { readCategories, readLanguages, readPosition, readRate, readTransmission, text } from '../validation.js';
 
 const INSTRUCTOR_SELECT = `
   SELECT i.*, u.first_name, u.last_name, u.city
@@ -11,7 +12,7 @@ const INSTRUCTOR_SELECT = `
 
 const COMMISSION_RATE = 0.2;
 
-function readPosition(query) {
+function searchOrigin(query) {
   const lat = Number(query.lat);
   const lng = Number(query.lng);
   if (Number.isFinite(lat) && Number.isFinite(lng) && query.lat !== '' && query.lng !== '') {
@@ -25,7 +26,7 @@ export function instructorRoutes(db) {
 
   // Recherche « à la Uber » : moniteurs proches, triés par distance.
   router.get('/', async (req, res) => {
-    const from = readPosition(req.query);
+    const from = searchOrigin(req.query);
     const { category, transmission, language } = req.query;
     const onlineOnly = req.query.onlineOnly === '1' || req.query.onlineOnly === 'true';
     const maxKm = Number(req.query.maxKm) || 50;
@@ -60,42 +61,20 @@ export function instructorRoutes(db) {
 
     if (body.isOnline !== undefined) set('is_online', body.isOnline ? 1 : 0);
     if (body.lat !== undefined || body.lng !== undefined) {
-      const lat = Number(body.lat);
-      const lng = Number(body.lng);
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) throw new HttpError(400, 'Position invalide.');
+      const { lat, lng } = readPosition(body.lat, body.lng);
       set('lat', lat);
       set('lng', lng);
     }
-    if (body.hourlyRate !== undefined) {
-      const rate = Number(body.hourlyRate);
-      if (!Number.isFinite(rate) || rate < 20 || rate > 250) {
-        throw new HttpError(400, 'Le tarif horaire doit être compris entre 20 € et 250 €.');
-      }
-      set('hourly_rate_cents', Math.round(rate * 100));
-    }
-    if (body.categories !== undefined) {
-      const categories = (Array.isArray(body.categories) ? body.categories : []).filter((c) =>
-        PERMIT_CODES.includes(c),
-      );
-      if (!categories.length) throw new HttpError(400, 'Indiquez au moins une catégorie.');
-      set('categories', JSON.stringify(categories));
-    }
-    if (body.languages !== undefined) {
-      if (!Array.isArray(body.languages) || !body.languages.length) throw new HttpError(400, 'Langues invalides.');
-      set('languages', JSON.stringify(body.languages));
-    }
-    if (body.transmission !== undefined) {
-      if (!['manuelle', 'automatique', 'les deux'].includes(body.transmission)) {
-        throw new HttpError(400, 'Boîte de vitesses invalide.');
-      }
-      set('transmission', body.transmission);
-    }
-    for (const [key, column] of [
-      ['bio', 'bio'],
-      ['vehicle', 'vehicle'],
-      ['schoolName', 'school_name'],
+    if (body.hourlyRate !== undefined) set('hourly_rate_cents', readRate(body.hourlyRate));
+    if (body.categories !== undefined) set('categories', JSON.stringify(readCategories(body.categories)));
+    if (body.languages !== undefined) set('languages', JSON.stringify(readLanguages(body.languages)));
+    if (body.transmission !== undefined) set('transmission', readTransmission(body.transmission));
+    for (const [key, column, max] of [
+      ['bio', 'bio', 2000],
+      ['vehicle', 'vehicle', 120],
+      ['schoolName', 'school_name', 120],
     ]) {
-      if (body[key] !== undefined) set(column, String(body[key]));
+      if (body[key] !== undefined) set(column, text(body[key], max));
     }
 
     if (updates.length) {
@@ -106,6 +85,7 @@ export function instructorRoutes(db) {
   });
 
   router.get('/me/stats', requireAuth('instructor'), async (req, res) => {
+    await expireStaleBookings(db);
     const totals = await db.get(
       `SELECT COUNT(*) AS lessons, COALESCE(SUM(duration_min), 0) AS minutes,
                 COALESCE(SUM(price_cents), 0) AS gross
@@ -148,7 +128,7 @@ export function instructorRoutes(db) {
          ORDER BY b.updated_at DESC LIMIT 10`,
       row.user_id,
     );
-    res.json({ instructor: serializeInstructor(row, readPosition(req.query)), reviews });
+    res.json({ instructor: serializeInstructor(row, searchOrigin(req.query)), reviews });
   });
 
   return router;

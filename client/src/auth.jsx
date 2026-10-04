@@ -18,12 +18,33 @@ export function AuthProvider({ children }) {
     return () => window.removeEventListener('autoschub:session-expired', expire);
   }, []);
 
+  // Session refusée (401) : on oublie le jeton. Autre erreur (réseau, 503 au démarrage
+  // à froid…) : la session est sans doute valide, on réessaie au lieu de déconnecter.
   useEffect(() => {
-    if (!getToken()) return;
-    api('/auth/me')
-      .then(({ user: me }) => setUser(me))
-      .catch(() => setToken(null))
-      .finally(() => setLoading(false));
+    if (!getToken()) return undefined;
+    let cancelled = false;
+    let timer;
+    const load = () =>
+      api('/auth/me')
+        .then(({ user: me }) => {
+          if (cancelled) return;
+          setUser(me);
+          setLoading(false);
+        })
+        .catch((err) => {
+          if (cancelled) return;
+          if (err.status === 401 || !getToken()) {
+            setToken(null);
+            setLoading(false);
+          } else {
+            timer = setTimeout(load, 3000);
+          }
+        });
+    load();
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, []);
 
   const authenticate = useCallback(async (path, body) => {

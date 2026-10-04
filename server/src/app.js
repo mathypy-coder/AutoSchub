@@ -1,7 +1,7 @@
 import express from 'express';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { authMiddleware } from './auth.js';
+import { authMiddleware, SECRET_SOURCE } from './auth.js';
 import { PERMITS, PERMIT_GROUPS } from './data/permits.js';
 import { errorHandler } from './errors.js';
 import { authRoutes } from './routes/auth.js';
@@ -24,6 +24,9 @@ const cachePublic = (_req, res, next) => {
 export function createApp(db) {
   const app = express();
   app.disable('x-powered-by');
+  // Sur Vercel, l'adresse du client arrive par X-Forwarded-For (posé par la plateforme) : utile
+  // pour limiter les tentatives de connexion. Ailleurs, l'en-tête pourrait être falsifié.
+  if (process.env.VERCEL || process.env.TRUST_PROXY === '1') app.set('trust proxy', true);
   app.use(express.json({ limit: '100kb' }));
 
   // Diagnostic de configuration (sans révéler de secret).
@@ -32,7 +35,7 @@ export function createApp(db) {
     res.json({
       ok: true,
       database: db.isRemote ? 'turso' : 'locale',
-      authSecret: Boolean(process.env.AUTH_SECRET || process.env.TURSO_AUTH_TOKEN),
+      authSecret: SECRET_SOURCE,
       region: process.env.VERCEL_REGION ?? null,
     });
   });

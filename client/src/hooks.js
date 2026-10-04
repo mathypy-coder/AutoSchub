@@ -9,13 +9,21 @@ export function usePolling(path, intervalMs = 5000) {
   const [error, setError] = useState('');
   const pathRef = useRef(path);
   pathRef.current = path;
+  const lastRequest = useRef(0);
 
   const refresh = useCallback(async () => {
-    if (!pathRef.current) return;
+    const requested = pathRef.current;
+    if (!requested) return;
+    // Seule la réponse de la dernière requête compte : une réponse plus ancienne
+    // (autre position, autre filtre) arrivée en retard n'écrase pas la nouvelle.
+    const id = ++lastRequest.current;
     try {
-      setData(await api(pathRef.current));
+      const result = await api(requested);
+      if (id !== lastRequest.current) return;
+      setData(result);
       setError('');
     } catch (err) {
+      if (id !== lastRequest.current) return;
       setError(err.message);
     }
   }, []);

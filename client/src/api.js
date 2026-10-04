@@ -31,7 +31,11 @@ export async function api(path, { method = 'GET', body, auth = true } = {}) {
   const data = await res.json().catch(() => ({}));
   // Connexion refusée par le serveur (session expirée, nouveau déploiement…).
   if (res.status === 401 && token) window.dispatchEvent(new Event('autoschub:session-expired'));
-  if (!res.ok) throw new Error([data.error || `Erreur ${res.status}`, data.detail].filter(Boolean).join(' — '));
+  if (!res.ok) {
+    const error = new Error([data.error || `Erreur ${res.status}`, data.detail].filter(Boolean).join(' — '));
+    error.status = res.status;
+    throw error;
+  }
   return data;
 }
 
@@ -43,6 +47,7 @@ export const STATUS_LABELS = {
   completed: 'Terminée',
   declined: 'Refusée',
   cancelled: 'Annulée',
+  expired: 'Expirée (sans réponse)',
 };
 
 export const LANGUAGE_LABELS = {

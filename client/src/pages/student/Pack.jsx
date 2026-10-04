@@ -160,9 +160,12 @@ function ActivePack({ state, catalog, onCall }) {
           </>
         )}
         <p className="small muted">
-          {sub.cancelAtPeriodEnd
-            ? `Résilié : le pack reste actif jusqu’au ${formatDate(sub.currentPeriodEnd)}.`
-            : `Renouvellement le ${formatDate(sub.currentPeriodEnd)}.`}
+          {sub.licenseObtained
+            ? `🎉 Permis obtenu : ton pack se termine le ${formatDate(sub.currentPeriodEnd)}.`
+            : sub.cancelAtPeriodEnd
+              ? `Résilié : le pack reste actif jusqu’au ${formatDate(sub.currentPeriodEnd)}.`
+              : `Renouvellement le ${formatDate(sub.currentPeriodEnd)}.`}
+          {sub.pendingPlan && ` · Passage au pack ${sub.pendingPlan.name} à cette date.`}
           {sub.plan.discount > 0 && ` · -${Math.round(sub.plan.discount * 100)} % sur les heures en plus.`}
         </p>
         <Link className="btn btn-primary btn-block" to="/reserver">
@@ -218,7 +221,7 @@ function ActivePack({ state, catalog, onCall }) {
                   className="row declare"
                   onSubmit={async (e) => {
                     e.preventDefault();
-                    if (step.id === 'license' && !window.confirm('Bravo ! Déclarer ton permis obtenu clôture ton pack. Continuer ?')) return;
+                    if (step.id === 'license' && !window.confirm('Bravo ! Ton pack ne sera plus renouvelé et se terminera à la fin du mois en cours. Continuer ?')) return;
                     await onCall('/subscriptions/me/journey', 'PATCH', { [DECLARE_FIELDS[step.id]]: date });
                     setDeclaring(null);
                   }}
@@ -233,17 +236,28 @@ function ActivePack({ state, catalog, onCall }) {
       </ol>
 
       <h2 className="section-title">Changer de formule</h2>
+      <p className="muted small">Le changement prend effet au prochain renouvellement ({formatDate(sub.currentPeriodEnd)}).</p>
       <div className="row wrap">
         {otherPlans.map((p) => (
           <button
             key={p.id}
             type="button"
-            className="btn btn-secondary"
+            className={`btn ${sub.pendingPlan?.id === p.id ? 'btn-primary' : 'btn-secondary'}`}
+            disabled={sub.pendingPlan?.id === p.id}
             onClick={() => onCall('/subscriptions/me/plan', 'POST', { planId: p.id })}
           >
-            {p.name} · {formatPrice(p.priceMonthly)}/mois
+            {p.name} · {formatPrice(p.priceMonthly)}/mois{sub.pendingPlan?.id === p.id ? ' ✓ prévu' : ''}
           </button>
         ))}
+        {sub.pendingPlan && (
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => onCall('/subscriptions/me/plan', 'POST', { planId: sub.plan.id })}
+          >
+            Garder {sub.plan.name}
+          </button>
+        )}
       </div>
       <button
         type="button"
