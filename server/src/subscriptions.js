@@ -1,5 +1,6 @@
 import { PERIOD_DAYS, PLANS_BY_ID, TARGET_HOURS } from './data/plans.js';
 import { PERMITS } from './data/permits.js';
+import { skillsSummary } from './progress.js';
 
 const DAY_MS = 24 * 3600 * 1000;
 const COUNTED_STATUSES = ['pending', 'accepted', 'en_route', 'in_progress', 'completed'];
@@ -125,6 +126,7 @@ export async function buildJourney(db, sub) {
     sub.category,
   );
 
+  const skills = await skillsSummary(db, sub.student_id, sub.category);
   const targetHours = TARGET_HOURS[sub.category] ?? 20;
   const hours = Math.round((driving.minutes / 60) * 10) / 10;
   const theoryPassed = Boolean(bestExam?.passed);
@@ -153,6 +155,14 @@ export async function buildJourney(db, sub) {
       progress: Math.min(1, hours / targetHours),
     },
     {
+      id: 'skills',
+      label: 'Compétences maîtrisées (fiche du moniteur)',
+      // Prêt pour l'examen : au moins 80 % des compétences notées « maîtrisé ».
+      done: skills.mastered >= Math.ceil(skills.total * 0.8),
+      detail: `${skills.mastered} sur ${skills.total} maîtrisées`,
+      progress: skills.progress,
+    },
+    {
       id: 'exam',
       label: 'Examen pratique planifié',
       done: Boolean(sub.exam_date),
@@ -173,6 +183,7 @@ export async function buildJourney(db, sub) {
     theory: 'Passe des examens blancs jusqu’à atteindre 41/50, puis inscris-toi à l’examen officiel.',
     provisional: 'Théorie en poche ? Demande ton permis provisoire à ta commune, puis déclare-le ici.',
     driving: 'Réserve tes leçons régulièrement : 2 à 3 h par semaine, c’est le bon rythme.',
+    skills: 'Demande à ton moniteur de remplir ta fiche après chaque leçon : elle montre ce qu’il reste à travailler.',
     exam: 'Ton moniteur estime que tu es prêt·e ? Réserve ton examen pratique et indique sa date.',
     license: 'Dernière ligne droite : une leçon de révision juste avant l’examen fait la différence.',
   };

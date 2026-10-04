@@ -1,13 +1,22 @@
 import { after, before, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createApp } from '../src/app.js';
+import { brusselsToUtc } from '../src/time.js';
 import { openDb } from '../src/db.js';
 import { DEMO_PASSWORD, DEMO_PACK_EMAIL, seed, seedDemo, seedDemoPack } from '../src/seed.js';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildJourney, getActiveSubscription, serializeSubscription } from '../src/subscriptions.js';
-import { gradeAnswers } from '../src/routes/theory.js';
+import { gradeAnswers, readinessScore } from '../src/routes/theory.js';
+import { QUESTIONS } from '../src/data/questions.js';
+
+// Début de leçon valide : jour ouvrable (pas le dimanche) à `hour` h, heure de Bruxelles.
+function slot(days, hour = 10) {
+  const date = new Date(Date.now() + days * 86400000);
+  if (date.getUTCDay() === 0) date.setUTCDate(date.getUTCDate() + 1);
+  return brusselsToUtc(date.toISOString().slice(0, 10), hour * 60).toISOString();
+}
 
 let server;
 let baseUrl;
@@ -139,7 +148,7 @@ describe('cycle de réservation', () => {
       token: student,
       body: {
         instructorId: data.instructors[0].id, category: 'AM', pickupAddress: 'x',
-        startAt: new Date(Date.now() + 86400000).toISOString(),
+        startAt: slot(1),
       },
     });
     assert.equal(r.status, 400);
@@ -189,11 +198,7 @@ describe('théorie', () => {
 });
 
 describe('packs d’abonnement', () => {
-  const inDays = (d, hour = 10) => {
-    const date = new Date(Date.now() + d * 86400000);
-    date.setUTCHours(hour, 0, 0, 0);
-    return date.toISOString();
-  };
+  const inDays = (d, hour = 10) => slot(d, hour);
 
   test('examens blancs limités sans pack, heures incluses et réduction avec pack', async () => {
     const { data: reg } = await api('/api/auth/register', {
@@ -218,7 +223,7 @@ describe('packs d’abonnement', () => {
     const sub = await api('/api/subscriptions', { method: 'POST', token, body: { planId: 'conduite', category: 'B' } });
     assert.equal(sub.status, 201);
     assert.equal(sub.data.subscription.remainingMinutes, 180);
-    assert.equal(sub.data.journey.steps.length, 6);
+    assert.equal(sub.data.journey.steps.length, 7);
     const again = await api('/api/subscriptions', { method: 'POST', token, body: { planId: 'integral', category: 'B' } });
     assert.equal(again.status, 409);
     assert.equal((await api('/api/theory/quiz?category=B&mode=exam', { token })).status, 200);
@@ -239,7 +244,7 @@ describe('packs d’abonnement', () => {
 
     const second = await api('/api/bookings', {
       method: 'POST', token,
-      body: { instructorId: lucas.id, category: 'B', durationMin: 120, pickupAddress: 'Rue A', startAt: inDays(4) },
+      body: { instructorId: lucas.id, category: 'B', durationMin: 120, pickupAddress: 'Rue A', startAt: inDays(4, 14) },
     });
     assert.equal(second.data.booking.coveredMinutes, 60);
     assert.equal(second.data.booking.studentPrice, 45); // 60 min à 50 € avec -10 %
@@ -376,7 +381,7 @@ describe('corrections de la revue', () => {
     const instructor = await login('moniteur@autoschub.be');
     const { data: list } = await api('/api/instructors?category=B');
     const sophie = list.instructors.find((i) => i.firstName === 'Sophie');
-    const startAt = new Date(Date.now() + 20 * 86400000).toISOString();
+    const startAt = slot(20);
     const created = await api('/api/bookings', {
       method: 'POST', token: student,
       body: { instructorId: sophie.id, category: 'B', pickupAddress: 'Rue X', startAt },
@@ -404,7 +409,7 @@ describe('corrections de la revue', () => {
     const student = (await register('double@test.be')).data.token;
     const { data: list } = await api('/api/instructors?category=B&maxKm=500');
     const [a, b] = list.instructors;
-    const startAt = new Date(Date.now() + 30 * 86400000).toISOString();
+    const startAt = slot(30);
     const book = (instructorId) =>
       api('/api/bookings', {
         method: 'POST', token: student,
@@ -420,7 +425,7 @@ describe('corrections de la revue', () => {
     const student = (await register('expire@test.be')).data.token;
     const { data: list } = await api('/api/instructors?category=B');
     const sophie = list.instructors.find((i) => i.firstName === 'Sophie');
-    const startAt = new Date(Date.now() + 40 * 86400000).toISOString();
+    const startAt = slot(40);
     const body = { instructorId: sophie.id, category: 'B', pickupAddress: 'Rue Z', startAt };
     const first = await api('/api/bookings', { method: 'POST', token: student, body });
     // Demande dont l'heure de début est passée sans réponse du moniteur.
@@ -545,5 +550,160 @@ describe('démarrage à froid', () => {
     assert.equal(queries, 0);
     assert.ok(await second.get('SELECT 1 FROM users WHERE email = ?', DEMO_PACK_EMAIL));
     second.close();
+  });
+});
+
+describe('disponibilités et créneaux', () => {
+  test('le moniteur définit ses plages ; seuls les créneaux libres sont proposés et réservables', async () => {
+    const instructor = await login('moniteur@autoschub.be');
+    const student = await login('eleve@autoschub.be');
+    const me = await api('/api/auth/me', { token: instructor });
+
+    const bad = await api('/api/instructors/me/availability', {
+      method: 'PUT', token: instructor, body: { week: [{ weekday: 1, startMin: 600, endMin: 630 }] },
+    });
+    assert.equal(bad.status, 400);
+
+    // Mardi uniquement, 9 h – 12 h.
+    const put = await api('/api/instructors/me/availability', {
+      method: 'PUT', token: instructor, body: { week: [{ weekday: 2, startMin: 540, endMin: 720 }] },
+    });
+    assert.equal(put.status, 200);
+    assert.equal(put.data.isDefault, false);
+
+    // Prochain mardi à au moins 3 jours.
+    const d = new Date(Date.now() + 3 * 86400000);
+    while (d.getUTCDay() !== 2) d.setUTCDate(d.getUTCDate() + 1);
+    const date = d.toISOString().slice(0, 10);
+    const { data } = await api(`/api/instructors/${me.data.user.id}/slots?date=${date}&durationMin=60`, { token: student });
+    assert.deepEqual(data.slots.map((s) => s.label), ['09:00', '09:30', '10:00', '10:30', '11:00']);
+
+    const outside = await api('/api/bookings', {
+      method: 'POST', token: student,
+      body: { instructorId: me.data.user.id, category: 'B', pickupAddress: 'Rue A', startAt: brusselsToUtc(date, 14 * 60).toISOString() },
+    });
+    assert.equal(outside.status, 409);
+
+    const ok = await api('/api/bookings', {
+      method: 'POST', token: student,
+      body: { instructorId: me.data.user.id, category: 'B', pickupAddress: 'Rue A', startAt: data.slots[2].startAt },
+    });
+    assert.equal(ok.status, 201);
+    const after = await api(`/api/instructors/${me.data.user.id}/slots?date=${date}&durationMin=60`, { token: student });
+    assert.deepEqual(after.data.slots.map((s) => s.label), ['09:00', '11:00']);
+
+    // Nettoyage : on remet des plages larges pour les autres tests.
+    await api(`/api/bookings/${ok.data.booking.id}/status`, { method: 'POST', token: student, body: { status: 'cancelled' } });
+    await api('/api/instructors/me/availability', {
+      method: 'PUT', token: instructor,
+      body: { week: [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, startMin: 0, endMin: 1440 })) },
+    });
+  });
+});
+
+describe('fiche de compétences et messagerie', () => {
+  test('le moniteur note les compétences ; l’élève voit sa progression ; messages et non-lus', async () => {
+    const instructor = await login('moniteur@autoschub.be');
+    const student = await login('eleve@autoschub.be');
+    const me = await api('/api/auth/me', { token: instructor });
+    const created = await api('/api/bookings', {
+      method: 'POST', token: student,
+      body: { instructorId: me.data.user.id, category: 'B', pickupAddress: 'Rue S', startAt: slot(12, 15) },
+    });
+    assert.equal(created.status, 201);
+    const id = created.data.booking.id;
+
+    const early = await api(`/api/bookings/${id}/skills`, { method: 'POST', token: instructor, body: { levels: { creneau: 2 } } });
+    assert.equal(early.status, 409);
+
+    // Messagerie avant la leçon.
+    const msg = await api(`/api/bookings/${id}/messages`, { method: 'POST', token: student, body: { body: 'Bonjour !' } });
+    assert.equal(msg.status, 201);
+    const empty = await api(`/api/bookings/${id}/messages`, { method: 'POST', token: student, body: { body: '   ' } });
+    assert.equal(empty.status, 400);
+    let list = await api('/api/bookings', { token: instructor });
+    assert.equal(list.data.bookings.find((b) => b.id === id).unreadMessages, 1);
+    const thread = await api(`/api/bookings/${id}/messages`, { token: instructor });
+    assert.equal(thread.data.messages[0].body, 'Bonjour !');
+    assert.equal(thread.data.messages[0].mine, false);
+    list = await api('/api/bookings', { token: instructor });
+    assert.equal(list.data.bookings.find((b) => b.id === id).unreadMessages, 0);
+
+    for (const status of ['accepted', 'in_progress']) {
+      await api(`/api/bookings/${id}/status`, { method: 'POST', token: instructor, body: { status } });
+    }
+    const forbidden = await api(`/api/bookings/${id}/skills`, { method: 'POST', token: student, body: { levels: { creneau: 3 } } });
+    assert.equal(forbidden.status, 403);
+    const invalid = await api(`/api/bookings/${id}/skills`, { method: 'POST', token: instructor, body: { levels: { creneau: 7 } } });
+    assert.equal(invalid.status, 400);
+    const saved = await api(`/api/bookings/${id}/skills`, {
+      method: 'POST', token: instructor, body: { levels: { creneau: 2, priorites: 3, inconnue: 3 } },
+    });
+    assert.equal(saved.data.saved, 2);
+
+    const grid = await api('/api/progress/skills?category=B', { token: student });
+    const levels = Object.fromEntries(grid.data.skills.map((s) => [s.id, s.level]));
+    assert.equal(levels.creneau, 2);
+    assert.equal(levels.priorites, 3);
+    assert.equal(grid.data.summary.mastered, 1);
+
+    const lesson = await api(`/api/bookings/${id}/skills`, { token: student });
+    assert.equal(lesson.data.skills.find((s) => s.id === 'creneau').lessonLevel, 2);
+
+    // Un moniteur ne voit que la grille de ses propres élèves.
+    const other = await login('lucas.martin@autoschub.be');
+    const denied = await api(`/api/progress/skills?category=B&studentId=${list.data.bookings[0].student.id}`, { token: other });
+    assert.equal(denied.status, 404);
+  });
+});
+
+describe('théorie adaptative', () => {
+  test('les erreurs reviennent en révision puis disparaissent ; préparation par thème', async () => {
+    const { data: reg } = await api('/api/auth/register', {
+      method: 'POST',
+      body: { role: 'student', firstName: 'Zoé', lastName: 'Revue', email: 'zoe@test.be', password: 'motdepasse' },
+    });
+    const token = reg.token;
+    const none = await api('/api/theory/quiz?category=B&mode=review', { token });
+    assert.equal(none.status, 404);
+
+    const quiz = await api('/api/theory/quiz?category=B&mode=practice&count=5', { token });
+    const ids = quiz.data.questions.map((q) => q.id);
+    await api('/api/theory/submit', { method: 'POST', token, body: { quizToken: quiz.data.quizToken, answers: {} } });
+
+    const review = await api('/api/theory/quiz?category=B&mode=review', { token });
+    assert.equal(review.status, 200);
+    assert.deepEqual(review.data.questions.map((q) => q.id).sort(), [...ids].sort());
+
+    const insights = await api('/api/theory/insights?category=B', { token });
+    assert.equal(insights.data.toReview, 5);
+    assert.ok(insights.data.themes.some((t) => t.rate === 0));
+    assert.equal(insights.data.ready, false);
+
+    // Deux bonnes réponses d'affilée retirent une question de la révision.
+    const right = Object.fromEntries(QUESTIONS.filter((q) => ids.includes(q.id)).map((q) => [q.id, q.answer]));
+    for (let i = 0; i < 2; i += 1) {
+      const r = await api('/api/theory/quiz?category=B&mode=review', { token });
+      await api('/api/theory/submit', { method: 'POST', token, body: { quizToken: r.data.quizToken, answers: right } });
+    }
+    const cleared = await api('/api/theory/quiz?category=B&mode=review', { token });
+    assert.equal(cleared.status, 404);
+  });
+
+  test('score de préparation', () => {
+    const themes = ['a', 'b'];
+    assert.equal(readinessScore([], [], themes), 0);
+    assert.equal(
+      readinessScore([{ score: 50, max_score: 50 }], [{ theme: 'a', answered: 5, correct: 5 }, { theme: 'b', answered: 5, correct: 5 }], themes),
+      100,
+    );
+    assert.equal(readinessScore([{ score: 25, max_score: 50 }], [], themes), 35);
+  });
+});
+
+describe('configuration publique', () => {
+  test('/api/config indique si la démo est disponible', async () => {
+    const { data } = await api('/api/config');
+    assert.equal(typeof data.demo, 'boolean');
   });
 });

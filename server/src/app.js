@@ -7,6 +7,8 @@ import { errorHandler } from './errors.js';
 import { authRoutes } from './routes/auth.js';
 import { bookingRoutes } from './routes/bookings.js';
 import { examCenterRoutes } from './routes/examCenters.js';
+import { progressRoutes } from './routes/progress.js';
+import { demoEnabled } from './seed.js';
 import { instructorRoutes } from './routes/instructors.js';
 import { subscriptionRoutes } from './routes/subscriptions.js';
 import { theoryRoutes } from './routes/theory.js';
@@ -39,6 +41,11 @@ export function createApp(db) {
       region: process.env.VERCEL_REGION ?? null,
     });
   });
+  // Configuration publique pour l'app (ex. afficher ou non les comptes de démo).
+  app.get('/api/config', (_req, res) => {
+    res.set('Cache-Control', 'public, max-age=60, s-maxage=300');
+    res.json({ demo: demoEnabled() && process.env.DEMO_LOGIN !== '0' });
+  });
   app.get('/api/permits', cachePublic, (_req, res) => res.json({ groups: PERMIT_GROUPS, permits: PERMITS }));
   app.get(['/api/exam-centers', '/api/subscriptions/plans', '/api/theory/categories'], cachePublic);
 
@@ -49,6 +56,7 @@ export function createApp(db) {
   app.use('/api/theory', theoryRoutes(db));
   app.use('/api/subscriptions', subscriptionRoutes(db));
   app.use('/api/exam-centers', examCenterRoutes());
+  app.use('/api/progress', progressRoutes(db));
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Route inconnue.' }));
 
   // En production, le serveur sert aussi l'application web compilée.

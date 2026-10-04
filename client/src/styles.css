@@ -940,3 +940,271 @@ textarea:focus {
   border-radius: 10px;
   font-size: 0.9rem;
 }
+
+/* ——— Créneaux de réservation ——— */
+.days {
+  display: flex;
+  gap: 0.4rem;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: none;
+}
+.day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 58px;
+  padding: 0.45rem 0.4rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.day strong {
+  font-size: 0.85rem;
+}
+.day-active {
+  background: var(--brand);
+  color: var(--bg);
+  border-color: var(--brand);
+}
+.slot-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* ——— Outils des cartes de leçon ——— */
+.card-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.2rem;
+}
+.tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 0.35rem 0.75rem;
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+  text-decoration: none;
+}
+.tool-active {
+  border-color: var(--brand);
+  font-weight: 700;
+}
+.dot {
+  background: var(--danger);
+  color: #fff;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0 0.4rem;
+  min-width: 1.1rem;
+  text-align: center;
+}
+
+/* ——— Messagerie ——— */
+.thread {
+  background: var(--bg);
+  border-radius: 12px;
+  padding: 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.thread-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  max-height: 280px;
+  overflow-y: auto;
+}
+.bubble {
+  align-self: flex-start;
+  max-width: 85%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px 14px 14px 4px;
+  padding: 0.45rem 0.7rem;
+}
+.bubble p {
+  margin: 0.1rem 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.bubble-mine {
+  align-self: flex-end;
+  background: var(--brand);
+  color: var(--bg);
+  border-color: var(--brand);
+  border-radius: 14px 14px 4px 14px;
+}
+.bubble-time {
+  display: block;
+  font-size: 0.68rem;
+  opacity: 0.7;
+  margin-top: 0.15rem;
+}
+.thread-form {
+  display: flex;
+  gap: 0.4rem;
+}
+.thread-form .btn {
+  padding: 0.5rem 0.9rem;
+  min-height: 40px;
+}
+
+/* ——— Fiche de compétences ——— */
+.skills-sheet {
+  background: var(--bg);
+  border-radius: 12px;
+  padding: 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.skills-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-top: 0.3rem;
+}
+.skill-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.2rem 0;
+  border-bottom: 1px dashed var(--border);
+}
+.level-picker {
+  display: inline-flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.level-picker button {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  font-size: 0.8rem;
+  cursor: pointer;
+  border-radius: 8px;
+}
+.level-bar {
+  display: inline-flex;
+  gap: 3px;
+  flex-shrink: 0;
+}
+.level-bar span {
+  width: 16px;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--border);
+}
+.level-picker .on.level-0 {
+  background: var(--border);
+}
+.level-picker .on.level-1,
+.level-bar .on.level-1 {
+  background: #f59e0b;
+  border-color: #f59e0b;
+  color: #fff;
+}
+.level-picker .on.level-2,
+.level-bar .on.level-2 {
+  background: #3b82f6;
+  border-color: #3b82f6;
+  color: #fff;
+}
+.level-picker .on.level-3,
+.level-bar .on.level-3 {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+/* ——— Théorie : préparation ——— */
+.insights {
+  gap: 0.6rem;
+}
+.gauge {
+  --value: 0;
+  --tone: var(--danger);
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  background: conic-gradient(var(--tone) calc(var(--value) * 1%), var(--border) 0);
+}
+.gauge span {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: var(--surface);
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: 0.9rem;
+}
+.gauge-mid {
+  --tone: #f59e0b;
+}
+.gauge-good {
+  --tone: var(--accent);
+}
+.theme-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  padding: 0.45rem 0;
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.theme-meter {
+  width: 70px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+}
+.theme-meter span {
+  display: block;
+  height: 100%;
+  background: var(--danger);
+}
+
+/* ——— Disponibilités du moniteur ——— */
+.avail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  border-bottom: 1px solid var(--border);
+}
+.avail-row input[type='time'] {
+  width: auto;
+  padding: 0.35rem 0.4rem;
+}

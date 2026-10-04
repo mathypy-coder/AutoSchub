@@ -1,5 +1,9 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api, formatDateTime, formatPrice } from '../api.js';
+import { downloadLessonIcs } from '../calendar.js';
+import MessageThread from '../components/MessageThread.jsx';
+import SkillsSheet from '../components/SkillsSheet.jsx';
 import { useAuth } from '../auth.jsx';
 import MapView from '../components/MapView.jsx';
 import { ErrorMessage, StatusBadge } from '../components/ui.jsx';
@@ -61,6 +65,7 @@ export default function Lessons() {
 }
 
 function BookingCard({ booking: b, role, onChange }) {
+  const [panel, setPanel] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const other = role === 'student' ? b.instructor : b.student;
@@ -141,6 +146,40 @@ function BookingCard({ booking: b, role, onChange }) {
           ))}
         </div>
       )}
+
+      <div className="card-tools">
+        {!['declined', 'expired'].includes(b.status) && (
+          <button
+            type="button"
+            className={`tool ${panel === 'messages' ? 'tool-active' : ''}`}
+            onClick={() => setPanel(panel === 'messages' ? null : 'messages')}
+          >
+            💬 Messages
+            {panel !== 'messages' && b.unreadMessages > 0 && <span className="dot">{b.unreadMessages}</span>}
+          </button>
+        )}
+        {(role === 'instructor' ? ['in_progress', 'completed'] : ['completed']).includes(b.status) && (
+          <button
+            type="button"
+            className={`tool ${panel === 'skills' ? 'tool-active' : ''}`}
+            onClick={() => setPanel(panel === 'skills' ? null : 'skills')}
+          >
+            📋 {role === 'instructor' ? 'Remplir la fiche' : 'Ma fiche'}
+          </button>
+        )}
+        {['accepted', 'en_route'].includes(b.status) && new Date(b.startAt) > new Date() && (
+          <button type="button" className="tool" onClick={() => downloadLessonIcs(b, `${other.firstName} ${other.lastName}`)}>
+            📆 Calendrier
+          </button>
+        )}
+        {role === 'student' && ['completed', 'cancelled', 'declined', 'expired'].includes(b.status) && (
+          <Link className="tool" to={`/reserver?instructor=${b.instructor.id}&category=${b.category}`}>
+            🔁 Réserver à nouveau
+          </Link>
+        )}
+      </div>
+      {panel === 'messages' && <MessageThread bookingId={b.id} onRead={onChange} />}
+      {panel === 'skills' && <SkillsSheet bookingId={b.id} editable={role === 'instructor'} />}
 
       {b.status === 'completed' && role === 'student' && b.studentRating == null && (
         <ReviewForm busy={busy} onSubmit={(body) => run(`/bookings/${b.id}/review`, body)} />

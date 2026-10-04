@@ -189,11 +189,67 @@ export function demoEnabled(env = process.env) {
   return !env.VERCEL && !env.TURSO_DATABASE_URL;
 }
 
+// Démo des fonctionnalités récentes : disponibilités des moniteurs, fiche de compétences
+// et messages de l'élève avec pack. Ajouté une seule fois, sans toucher aux données existantes.
+const DEMO_SKILLS = {
+  installation: 3, observation: 2, placement: 3, vitesse: 2, priorites: 2, 'ronds-points': 1,
+  usagers: 2, signalisation: 3, 'demarrage-cote': 3, creneau: 1, 'marche-arriere': 2, 'changement-bande': 1,
+};
+
+export async function seedDemoExtras(db) {
+  await db.transaction(async (tx) => {
+    // Disponibilités : du lundi au vendredi 8 h – 19 h, samedi 9 h – 13 h (si rien n'est configuré).
+    const instructors = await tx.all(
+      `SELECT user_id FROM instructors WHERE user_id NOT IN (SELECT instructor_id FROM instructor_availability)`,
+    );
+    for (const { user_id: id } of instructors) {
+      for (const [weekday, startMin, endMin] of [[1, 480, 1140], [2, 480, 1140], [3, 480, 1140], [4, 480, 1140], [5, 480, 1140], [6, 540, 780]]) {
+        await tx.run(
+          'INSERT INTO instructor_availability (instructor_id, weekday, start_min, end_min) VALUES (?, ?, ?, ?)',
+          id, weekday, startMin, endMin,
+        );
+      }
+    }
+
+    const student = await tx.get('SELECT id FROM users WHERE email = ?', DEMO_PACK_EMAIL);
+    if (!student) return;
+    const lastLesson = await tx.get(
+      `SELECT id, instructor_id FROM bookings WHERE student_id = ? AND status = 'completed' ORDER BY start_at DESC LIMIT 1`,
+      student.id,
+    );
+    const already = await tx.get('SELECT 1 FROM skill_assessments WHERE student_id = ?', student.id);
+    if (lastLesson && !already) {
+      for (const [skillId, level] of Object.entries(DEMO_SKILLS)) {
+        await tx.run(
+          `INSERT INTO skill_assessments (booking_id, student_id, instructor_id, category, skill_id, level)
+             VALUES (?, ?, ?, 'B', ?, ?)`,
+          lastLesson.id, student.id, lastLesson.instructor_id, skillId, level,
+        );
+      }
+    }
+    const upcoming = await tx.get(
+      `SELECT id, instructor_id FROM bookings WHERE student_id = ? AND status = 'accepted' ORDER BY start_at LIMIT 1`,
+      student.id,
+    );
+    const hasMessages = upcoming && (await tx.get('SELECT 1 FROM messages WHERE booking_id = ?', upcoming.id));
+    if (upcoming && !hasMessages) {
+      await tx.run(
+        'INSERT INTO messages (booking_id, sender_id, body) VALUES (?, ?, ?)',
+        upcoming.id, upcoming.instructor_id, 'Bonjour Noah ! Pour jeudi, on travaille les ronds-points et le créneau. Pense à ton permis provisoire 🙂',
+      );
+      await tx.run(
+        'INSERT INTO messages (booking_id, sender_id, body) VALUES (?, ?, ?)',
+        upcoming.id, student.id, 'Parfait, merci ! Je serai devant la gare à l’heure.',
+      );
+    }
+  });
+}
+
 export async function seedDemo(db) {
   if (!demoEnabled()) return;
   const withPack = process.env.DEMO_PACK !== '0';
   // Déjà fait (mémorisé dans la base) : rien à vérifier, démarrage plus rapide.
-  const marker = `v1${withPack ? '+pack' : ''}`;
+  const marker = `v2${withPack ? '+pack' : ''}`;
   if (db.meta?.demo_seeded === marker) return;
 
   await seedIfEmpty(db);
@@ -203,6 +259,11 @@ export async function seedDemo(db) {
     } catch (err) {
       if (!/UNIQUE|SQLITE_BUSY|locked/i.test(String(err?.message))) throw err;
     }
+  }
+  try {
+    await seedDemoExtras(db);
+  } catch (err) {
+    if (!/UNIQUE|SQLITE_BUSY|locked/i.test(String(err?.message))) throw err;
   }
   await db.setMeta?.('demo_seeded', marker);
 }

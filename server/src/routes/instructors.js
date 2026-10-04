@@ -4,6 +4,8 @@ import { DEFAULT_POSITION } from '../geo.js';
 import { HttpError } from '../errors.js';
 import { centsToEuros, rating, serializeInstructor } from '../serializers.js';
 import { expireStaleBookings } from '../bookingRules.js';
+import { BOOKING_HORIZON_DAYS, freeSlots, getWeek } from '../availability.js';
+import { isIsoDate } from '../validation.js';
 import { readCategories, readLanguages, readPosition, readRate, readTransmission, text } from '../validation.js';
 
 const INSTRUCTOR_SELECT = `
@@ -115,6 +117,61 @@ export function instructorRoutes(db) {
       rating: rating(profile),
       ratingCount: profile.rating_count,
     });
+  });
+
+  // Disponibilités hebdomadaires (heure de Bruxelles) : une plage par jour travaillé.
+  router.get('/me/availability', requireAuth('instructor'), async (req, res) => {
+    res.json(await getWeek(db, req.user.id));
+  });
+
+  router.put('/me/availability', requireAuth('instructor'), async (req, res) => {
+    const days = Array.isArray(req.body?.week) ? req.body.week : null;
+    if (!days) throw new HttpError(400, 'Disponibilités invalides.');
+    const week = [];
+    for (const d of days) {
+      const weekday = Number(d?.weekday);
+      const startMin = Number(d?.startMin);
+      const endMin = Number(d?.endMin);
+      const valid =
+        Number.isInteger(weekday) && weekday >= 0 && weekday <= 6 &&
+        Number.isInteger(startMin) && Number.isInteger(endMin) &&
+        startMin >= 0 && endMin <= 24 * 60 && endMin - startMin >= 60;
+      if (!valid) throw new HttpError(400, 'Chaque plage doit durer au moins 1 h, entre 00:00 et 24:00.');
+      if (week.some((w) => w.weekday === weekday)) throw new HttpError(400, 'Un seul créneau par jour.');
+      week.push({ weekday, startMin, endMin });
+    }
+    if (!week.length) throw new HttpError(400, 'Indique au moins un jour de disponibilité.');
+    await db.transaction(async (tx) => {
+      await tx.run('DELETE FROM instructor_availability WHERE instructor_id = ?', req.user.id);
+      for (const w of week) {
+        await tx.run(
+          'INSERT INTO instructor_availability (instructor_id, weekday, start_min, end_min) VALUES (?, ?, ?, ?)',
+          req.user.id,
+          w.weekday,
+          w.startMin,
+          w.endMin,
+        );
+      }
+    });
+    res.json(await getWeek(db, req.user.id));
+  });
+
+  // Créneaux libres d'un moniteur pour une date (réservation planifiée).
+  router.get('/:id/slots', async (req, res) => {
+    const id = Number(req.params.id);
+    const instructor = Number.isInteger(id) ? await db.get('SELECT user_id FROM instructors WHERE user_id = ?', id) : null;
+    if (!instructor) throw new HttpError(404, 'Moniteur introuvable.');
+    const { date } = req.query;
+    if (!isIsoDate(date)) throw new HttpError(400, 'Date invalide (AAAA-MM-JJ).');
+    const horizon = Date.now() + BOOKING_HORIZON_DAYS * 24 * 3600000;
+    if (Date.parse(`${date}T00:00:00Z`) > horizon) {
+      throw new HttpError(400, `Réservation possible jusqu’à ${BOOKING_HORIZON_DAYS} jours à l’avance.`);
+    }
+    const duration = [60, 90, 120].includes(Number(req.query.durationMin)) ? Number(req.query.durationMin) : 60;
+    await expireStaleBookings(db);
+    const studentId = req.user?.role === 'student' ? req.user.id : null;
+    res.set('Cache-Control', 'no-store');
+    res.json({ date, durationMin: duration, slots: await freeSlots(db, id, date, duration, studentId) });
   });
 
   router.get('/:id', async (req, res) => {

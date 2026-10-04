@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
+import { groupSkills, LevelBar } from '../components/SkillsSheet.jsx';
 
 export default function Profile() {
   const { user, logout } = useAuth();
@@ -47,6 +48,10 @@ export default function Profile() {
         </div>
       </div>
 
+      <SkillsOverview
+        category={Object.entries(hoursByCategory).sort((x, y) => y[1] - x[1])[0]?.[0] ?? 'B'}
+      />
+
       {Object.keys(hoursByCategory).length > 0 && (
         <div className="card">
           <strong>Heures de conduite par permis</strong>
@@ -73,6 +78,43 @@ export default function Profile() {
       <button type="button" className="btn btn-danger btn-block logout" onClick={logout}>
         Se déconnecter
       </button>
+    </div>
+  );
+}
+
+// Fiche de compétences : dernier niveau noté par les moniteurs pour chaque compétence.
+function SkillsOverview({ category }) {
+  const [data, setData] = useState(null);
+
+  useEffect(() => {
+    api(`/progress/skills?category=${category}`).then(setData).catch(() => setData(null));
+  }, [category]);
+
+  if (!data) return null;
+  const { summary } = data;
+  return (
+    <div className="card">
+      <div className="row-between">
+        <strong>Ma fiche de compétences · permis {category}</strong>
+        <span className="small">
+          {summary.mastered}/{summary.total} maîtrisées
+        </span>
+      </div>
+      <div className="progress">
+        <div style={{ width: `${summary.progress * 100}%` }} />
+      </div>
+      {groupSkills(data.skills).map(([group, skills]) => (
+        <div key={group} className="skills-group">
+          <div className="label">{group}</div>
+          {skills.map((s) => (
+            <div key={s.id} className="skill-row">
+              <span className="small grow">{s.label}</span>
+              <LevelBar level={s.level} />
+            </div>
+          ))}
+        </div>
+      ))}
+      <p className="muted small">Ton moniteur remplit la fiche après chaque leçon. Objectif : 80 % des compétences maîtrisées.</p>
     </div>
   );
 }

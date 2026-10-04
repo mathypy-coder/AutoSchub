@@ -82,6 +82,59 @@ async function assertExamAllowed(db, user) {
   }
 }
 
+// Une question ratée revient en révision jusqu'à 2 bonnes réponses d'affilée (répétition espacée).
+const REVIEW_STREAK_TO_CLEAR = 2;
+
+async function recordLearning(db, userId, category, corrections) {
+  await db.transaction(async (tx) => {
+    for (const c of corrections) {
+      await tx.run(
+        `INSERT INTO theory_theme_stats (user_id, category, theme, answered, correct) VALUES (?, ?, ?, 1, ?)
+         ON CONFLICT (user_id, category, theme) DO UPDATE SET answered = answered + 1, correct = correct + excluded.correct`,
+        userId,
+        category,
+        c.theme,
+        c.correct ? 1 : 0,
+      );
+      if (!c.correct) {
+        await tx.run(
+          `INSERT INTO theory_mistakes (user_id, question_id, category, wrong_count, streak) VALUES (?, ?, ?, 1, 0)
+           ON CONFLICT (user_id, question_id, category)
+             DO UPDATE SET wrong_count = wrong_count + 1, streak = 0, updated_at = datetime('now')`,
+          userId,
+          c.id,
+          category,
+        );
+      } else {
+        await tx.run(
+          `UPDATE theory_mistakes SET streak = streak + 1, updated_at = datetime('now')
+             WHERE user_id = ? AND question_id = ? AND category = ?`,
+          userId,
+          c.id,
+          category,
+        );
+      }
+    }
+    await tx.run(
+      'DELETE FROM theory_mistakes WHERE user_id = ? AND category = ? AND streak >= ?',
+      userId,
+      category,
+      REVIEW_STREAK_TO_CLEAR,
+    );
+  });
+}
+
+// Score de préparation (0–100) : 70 % moyenne des 3 derniers examens blancs,
+// 30 % part des thèmes maîtrisés (≥ 80 % de bonnes réponses sur au moins 3 questions).
+export function readinessScore(recentExams, themeStats, allThemes) {
+  const examAvg = recentExams.length
+    ? recentExams.reduce((sum, e) => sum + e.score / e.max_score, 0) / recentExams.length
+    : 0;
+  const masteredThemes = themeStats.filter((t) => t.answered >= 3 && t.correct / t.answered >= 0.8).length;
+  const themeShare = allThemes.length ? masteredThemes / allThemes.length : 0;
+  return Math.round(100 * (0.7 * examAvg + 0.3 * themeShare));
+}
+
 export function theoryRoutes(db) {
   const router = Router();
 
@@ -97,12 +150,26 @@ export function theoryRoutes(db) {
 
   router.get('/quiz', async (req, res) => {
     const { category, theme } = req.query;
-    const mode = req.query.mode === 'exam' ? 'exam' : 'practice';
+    const mode = ['exam', 'review'].includes(req.query.mode) ? req.query.mode : 'practice';
     if (!THEORY_CODES.includes(category)) throw new HttpError(400, 'Catégorie théorique invalide.');
     if (mode === 'exam') await assertExamAllowed(db, req.user);
 
     let pool = forCategory(category);
     if (mode === 'practice' && theme) pool = pool.filter((q) => q.theme === theme);
+    if (mode === 'review') {
+      // Révision espacée : les questions ratées, les plus souvent ratées d'abord.
+      if (!req.user) throw new HttpError(401, 'Connecte-toi pour revoir tes erreurs.');
+      const due = await db.all(
+        `SELECT question_id FROM theory_mistakes WHERE user_id = ? AND category = ?
+           ORDER BY wrong_count DESC, updated_at ASC LIMIT ?`,
+        req.user.id,
+        category,
+        MAX_PRACTICE_QUESTIONS,
+      );
+      const wanted = new Set(due.map((d) => d.question_id));
+      pool = pool.filter((q) => wanted.has(q.id));
+      if (!pool.length) throw new HttpError(404, 'Aucune erreur à revoir : bravo ! 🎉');
+    }
     if (!pool.length) throw new HttpError(404, 'Aucune question pour cette sélection.');
 
     const count =
@@ -137,7 +204,7 @@ export function theoryRoutes(db) {
         theme: t,
         question,
         choices,
-        ...(mode === 'practice' ? { grave } : {}),
+        ...(mode !== 'exam' ? { grave } : {}),
       })),
     });
   });
@@ -155,6 +222,7 @@ export function theoryRoutes(db) {
     if (quiz.mode === 'exam') await assertExamAllowed(db, req.user);
 
     const result = gradeAnswers(questions, answers);
+    if (req.user) await recordLearning(db, req.user.id, quiz.category, result.corrections);
     if (req.user) {
       try {
         await db.run(
@@ -179,6 +247,44 @@ export function theoryRoutes(db) {
       }
     }
     res.json(result);
+  });
+
+  // Tableau de bord d'apprentissage : préparation, thèmes forts/faibles, erreurs à revoir.
+  router.get('/insights', requireAuth(), async (req, res) => {
+    const { category } = req.query;
+    if (!THEORY_CODES.includes(category)) throw new HttpError(400, 'Catégorie théorique invalide.');
+    const allThemes = [...new Set(forCategory(category).map((q) => q.theme))];
+    const themeStats = await db.all(
+      'SELECT theme, answered, correct FROM theory_theme_stats WHERE user_id = ? AND category = ?',
+      req.user.id,
+      category,
+    );
+    const recentExams = await db.all(
+      `SELECT score, max_score FROM theory_attempts WHERE user_id = ? AND category = ? AND mode = 'exam'
+         ORDER BY id DESC LIMIT 3`,
+      req.user.id,
+      category,
+    );
+    const { n: toReview } = await db.get(
+      'SELECT COUNT(*) AS n FROM theory_mistakes WHERE user_id = ? AND category = ?',
+      req.user.id,
+      category,
+    );
+    const byTheme = new Map(themeStats.map((t) => [t.theme, t]));
+    const readiness = readinessScore(recentExams, themeStats, allThemes);
+    res.json({
+      category,
+      readiness,
+      ready: readiness >= 85 && recentExams.length >= 2,
+      examsTaken: recentExams.length,
+      toReview,
+      themes: allThemes
+        .map((theme) => {
+          const t = byTheme.get(theme);
+          return { theme, answered: t?.answered ?? 0, rate: t?.answered ? Math.round((t.correct / t.answered) * 100) : null };
+        })
+        .sort((a, b) => (a.rate ?? -1) - (b.rate ?? -1)),
+    });
   });
 
   router.get('/history', requireAuth(), async (req, res) => {

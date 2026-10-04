@@ -16,16 +16,76 @@ const TRANSMISSIONS = [
   { value: 'automatique', label: 'Automatique' },
 ];
 
-function toLocalInput(date) {
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+const WEEKDAY = new Intl.DateTimeFormat('fr-BE', { weekday: 'short' });
+const DAY = new Intl.DateTimeFormat('fr-BE', { day: 'numeric', month: 'short' });
+const pad = (n) => String(n).padStart(2, '0');
+const isoDay = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+// Les 14 prochains jours, pour choisir une date de leçon.
+function nextDays(count = 14) {
+  return Array.from({ length: count }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() + i);
+    return { value: isoDay(d), weekday: i === 0 ? 'Auj.' : i === 1 ? 'Dem.' : WEEKDAY.format(d), day: DAY.format(d) };
+  });
 }
 
-function defaultSlot() {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  d.setHours(10, 0, 0, 0);
-  return toLocalInput(d);
+// Créneaux libres du moniteur (selon ses disponibilités et ses leçons déjà prévues).
+function SlotPicker({ instructorId, durationMin, value, onChange }) {
+  const days = useMemo(() => nextDays(), []);
+  const [date, setDate] = useState(days[1].value);
+  const [slots, setSlots] = useState(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let alive = true;
+    setSlots(null);
+    setError('');
+    onChange(null);
+    api(`/instructors/${instructorId}/slots?date=${date}&durationMin=${durationMin}`)
+      .then((d) => alive && setSlots(d.slots))
+      .catch((err) => alive && setError(err.message));
+    return () => {
+      alive = false;
+    };
+  }, [instructorId, date, durationMin]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <div className="slot-picker">
+      <div className="label">Date</div>
+      <div className="days chips-scroll">
+        {days.map((d) => (
+          <button
+            key={d.value}
+            type="button"
+            className={`day ${d.value === date ? 'day-active' : ''}`}
+            onClick={() => setDate(d.value)}
+          >
+            <span>{d.weekday}</span>
+            <strong>{d.day}</strong>
+          </button>
+        ))}
+      </div>
+      <div className="label">Heure de début</div>
+      <ErrorMessage error={error} />
+      {!slots && !error && <p className="muted small">Recherche des créneaux…</p>}
+      {slots && !slots.length && <p className="muted small">Aucun créneau libre ce jour-là. Essaie une autre date.</p>}
+      {slots && slots.length > 0 && (
+        <div className="chips">
+          {slots.map((s) => (
+            <button
+              key={s.startAt}
+              type="button"
+              className={`chip ${value === s.startAt ? 'chip-active' : ''}`}
+              onClick={() => onChange(s.startAt)}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function Book() {
@@ -36,10 +96,11 @@ export default function Book() {
   const [examCenters, setExamCenters] = useState([]);
   const [showCenters, setShowCenters] = useState(true);
   const [permits, setPermits] = useState([]);
-  const [category, setCategory] = useState('B');
+  // « Réserver à nouveau » : /reserver?instructor=12&category=B présélectionne le moniteur.
+  const [category, setCategory] = useState(params.get('category') || 'B');
   const [transmission, setTransmission] = useState('');
   const [onlineOnly, setOnlineOnly] = useState(false);
-  const [selectedId, setSelectedId] = useState(null);
+  const [selectedId, setSelectedId] = useState(Number(params.get('instructor')) || null);
 
   useEffect(() => {
     api('/permits', { auth: false }).then((d) => setPermits(d.permits)).catch(() => {});
@@ -180,7 +241,7 @@ export default function Book() {
 
 function BookingPanel({ instructor, category, pickup, onBack, onBooked }) {
   const [when, setWhen] = useState(instructor.isOnline ? 'now' : 'later');
-  const [startAt, setStartAt] = useState(defaultSlot);
+  const [startAt, setStartAt] = useState(null);
   const [durationMin, setDurationMin] = useState(60);
   const [pickupAddress, setPickupAddress] = useState('');
   const [reviews, setReviews] = useState([]);
@@ -214,7 +275,7 @@ function BookingPanel({ instructor, category, pickup, onBack, onBooked }) {
           instructorId: instructor.id,
           category,
           durationMin,
-          startAt: when === 'now' ? null : new Date(startAt).toISOString(),
+          startAt: when === 'now' ? null : startAt,
           pickupAddress,
           pickupLat: pickup.lat,
           pickupLng: pickup.lng,
@@ -261,20 +322,11 @@ function BookingPanel({ instructor, category, pickup, onBack, onBooked }) {
           value={when}
           onChange={setWhen}
         />
-        {when === 'later' && (
-          <label>
-            Date et heure
-            <input
-              type="datetime-local"
-              value={startAt}
-              min={toLocalInput(new Date())}
-              onChange={(e) => setStartAt(e.target.value)}
-              required
-            />
-          </label>
-        )}
         <div className="label">Durée</div>
         <Chips options={DURATIONS} value={durationMin} onChange={setDurationMin} />
+        {when === 'later' && (
+          <SlotPicker instructorId={instructor.id} durationMin={durationMin} value={startAt} onChange={setStartAt} />
+        )}
         <label>
           Adresse de prise en charge
           <input
@@ -295,7 +347,7 @@ function BookingPanel({ instructor, category, pickup, onBack, onBooked }) {
           </p>
         )}
         <ErrorMessage error={error} />
-        <button className="btn btn-primary btn-block" disabled={busy}>
+        <button className="btn btn-primary btn-block" disabled={busy || (when === 'later' && !startAt)}>
           {busy ? 'Envoi…' : `Réserver ${category} · ${total === 0 ? 'inclus' : formatPrice(total)}`}
         </button>
         <p className="muted small center">Paiement à la fin de la leçon. Annulation gratuite tant que le moniteur n’a pas accepté.</p>

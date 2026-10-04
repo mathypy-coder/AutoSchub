@@ -3,6 +3,7 @@ import { api, LANGUAGE_LABELS } from '../../api.js';
 import { CITIES } from '../../cities.js';
 import { Chips, ErrorMessage, MultiChips } from '../../components/ui.jsx';
 import { useAuth } from '../../auth.jsx';
+import AvailabilityEditor from '../../components/AvailabilityEditor.jsx';
 
 const LANGUAGE_OPTIONS = Object.entries(LANGUAGE_LABELS).map(([value, label]) => ({ value, label }));
 const TRANSMISSIONS = [
@@ -111,6 +112,7 @@ export default function InstructorProfile() {
         {message && <p className="success">{message}</p>}
         <button className="btn btn-primary">Enregistrer</button>
       </form>
+      <AvailabilityEditor />
       <button type="button" className="btn btn-danger btn-block logout" onClick={logout}>
         Se déconnecter
       </button>

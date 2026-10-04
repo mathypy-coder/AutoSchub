@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { ErrorMessage } from '../components/ui.jsx';
 
@@ -15,6 +16,14 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  // Comptes de démo proposés seulement s'ils existent sur ce serveur.
+  const [demo, setDemo] = useState(false);
+
+  useEffect(() => {
+    api('/config', { auth: false })
+      .then((c) => setDemo(Boolean(c.demo)))
+      .catch(() => setDemo(false));
+  }, []);
 
   const submit = async (e, creds = { email, password }) => {
     e?.preventDefault();
@@ -56,22 +65,24 @@ export default function Login() {
         </button>
       </form>
 
-      <div className="demo-box">
-        <p className="muted">Essayer avec un compte de démonstration :</p>
-        <div className="row wrap">
-          {DEMO_ACCOUNTS.map((d) => (
-            <button
-              key={d.email}
-              type="button"
-              className="btn btn-secondary"
-              disabled={busy}
-              onClick={() => submit(null, { email: d.email, password: 'demo1234' })}
-            >
-              {d.label}
-            </button>
-          ))}
+      {demo && (
+        <div className="demo-box">
+          <p className="muted">Essayer avec un compte de démonstration :</p>
+          <div className="row wrap">
+            {DEMO_ACCOUNTS.map((d) => (
+              <button
+                key={d.email}
+                type="button"
+                className="btn btn-secondary"
+                disabled={busy}
+                onClick={() => submit(null, { email: d.email, password: 'demo1234' })}
+              >
+                {d.label}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       <p className="muted center">
         Pas encore de compte ? <Link to="/inscription">Inscription</Link>

@@ -10,6 +10,7 @@ export default function Theory() {
   const [result, setResult] = useState(null);
   const [history, setHistory] = useState([]);
   const [freeExamsLeft, setFreeExamsLeft] = useState(null);
+  const [insights, setInsights] = useState(null);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   // Garde synchrone : un double clic ou la fin du chrono pendant l'envoi ne corrige pas deux fois.
@@ -27,6 +28,18 @@ export default function Theory() {
     api('/theory/categories', { auth: false }).then(setMeta).catch((err) => setError(err.message));
     loadHistory();
   }, []);
+
+  // Préparation, thèmes faibles et erreurs à revoir pour la catégorie choisie.
+  useEffect(() => {
+    if (quiz) return undefined;
+    let alive = true;
+    api(`/theory/insights?category=${category}`)
+      .then((d) => alive && setInsights(d))
+      .catch(() => alive && setInsights(null));
+    return () => {
+      alive = false;
+    };
+  }, [category, quiz, result]);
 
   const start = async (mode, theme) => {
     setError('');
@@ -84,6 +97,8 @@ export default function Theory() {
             onChange={setCategory}
           />
 
+          {insights && <Insights insights={insights} onReview={() => start('review')} onTheme={(t) => start('practice', t)} />}
+
           <div className="card exam-card">
             <h2>📝 Examen blanc</h2>
             <p className="small">
@@ -127,7 +142,8 @@ export default function Theory() {
             {history.slice(0, 10).map((a) => (
               <li key={a.id} className="row-between">
                 <span className="small">
-                  {a.mode === 'exam' ? 'Examen' : a.theme || 'Entraînement'} · {a.category}
+                  {a.mode === 'exam' ? 'Examen' : a.mode === 'review' ? 'Révision des erreurs' : a.theme || 'Entraînement'} ·{' '}
+                  {a.category}
                   <br />
                   <span className="muted">{formatDateTime(`${a.createdAt.replace(' ', 'T')}Z`)}</span>
                 </span>
@@ -142,6 +158,53 @@ export default function Theory() {
       <p className="muted small">
         Questions d’entraînement indicatives. L’examen officiel se passe dans un centre agréé (GOCA) de votre région.
       </p>
+    </div>
+  );
+}
+
+// Score de préparation (0–100), thèmes à travailler et révision espacée des erreurs.
+function Insights({ insights, onReview, onTheme }) {
+  const { readiness, ready, toReview, themes, examsTaken } = insights;
+  const weak = themes.filter((t) => t.rate !== null && t.rate < 80).slice(0, 3);
+  const untouched = themes.filter((t) => t.rate === null).length;
+  const tone = readiness >= 85 ? 'good' : readiness >= 60 ? 'mid' : 'low';
+  return (
+    <div className="card insights">
+      <div className="row">
+        <div className={`gauge gauge-${tone}`} style={{ '--value': readiness }} aria-label={`Préparation ${readiness} %`}>
+          <span>{readiness}%</span>
+        </div>
+        <div className="grow">
+          <strong>{ready ? 'Prêt·e pour l’examen 🎉' : 'Ma préparation'}</strong>
+          <p className="small muted">
+            {examsTaken < 2
+              ? 'Passe au moins 2 examens blancs pour un score fiable.'
+              : ready
+                ? 'Tes derniers examens et tes thèmes sont au niveau : inscris-toi à l’examen officiel.'
+                : 'Objectif 85 % : révise tes erreurs et tes thèmes les plus faibles.'}
+          </p>
+        </div>
+      </div>
+      {toReview > 0 && (
+        <button type="button" className="btn btn-secondary btn-block" onClick={onReview}>
+          🔁 Revoir mes erreurs ({toReview})
+        </button>
+      )}
+      {weak.length > 0 && (
+        <div>
+          <div className="label">À travailler</div>
+          {weak.map((t) => (
+            <button key={t.theme} type="button" className="theme-row" onClick={() => onTheme(t.theme)}>
+              <span className="grow">{t.theme}</span>
+              <span className="theme-meter">
+                <span style={{ width: `${t.rate}%` }} />
+              </span>
+              <span className="small fail">{t.rate}%</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {untouched > 0 && <p className="muted small">{untouched} thème(s) pas encore travaillé(s).</p>}
     </div>
   );
 }
@@ -182,7 +245,7 @@ function Quiz({ quiz, error, submitting, onFinish, onQuit }) {
       </div>
       <p className="muted small">
         Question {index + 1}/{quiz.questions.length} · {question.theme}
-        {question.grave && quiz.mode === 'practice' && ' · ⚠️ faute grave'}
+        {question.grave && quiz.mode !== 'exam' && ' · ⚠️ faute grave'}
       </p>
       <h2 className="question">{question.question}</h2>
       <div className="answers">

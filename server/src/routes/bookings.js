@@ -5,6 +5,9 @@ import { serializeBooking } from '../serializers.js';
 import { quoteLesson } from '../subscriptions.js';
 import { BLOCKING_STATUSES, expireStaleBookings } from '../bookingRules.js';
 import { optionalText, text } from '../validation.js';
+import { BOOKING_HORIZON_DAYS, fitsWeek, getWeek } from '../availability.js';
+import { latestSkillLevels, skillsForCategory } from '../progress.js';
+import { SKILL_LEVELS } from '../data/skills.js';
 
 const BOOKING_SELECT = `
   SELECT b.*,
@@ -54,7 +57,17 @@ export function bookingRoutes(db) {
   router.get('/', async (req, res) => {
     const column = req.user.role === 'student' ? 'b.student_id' : 'b.instructor_id';
     const rows = await db.all(`${BOOKING_SELECT} WHERE ${column} = ? ORDER BY b.start_at DESC`, req.user.id);
-    res.json({ bookings: rows.map((row) => serializeBooking(row, req.user.role)) });
+    // Messages non lus (envoyés par l'autre partie), par leçon.
+    const unread = await db.all(
+      `SELECT m.booking_id AS id, COUNT(*) AS n FROM messages m JOIN bookings b ON b.id = m.booking_id
+         WHERE ${column} = ? AND m.sender_id != ? AND m.read_at IS NULL GROUP BY m.booking_id`,
+      req.user.id,
+      req.user.id,
+    );
+    const unreadById = new Map(unread.map((u) => [u.id, u.n]));
+    res.json({
+      bookings: rows.map((row) => ({ ...serializeBooking(row, req.user.role), unreadMessages: unreadById.get(row.id) ?? 0 })),
+    });
   });
 
   // Devis avant réservation : prix de la leçon et part couverte par le pack.
@@ -100,7 +113,14 @@ export function bookingRoutes(db) {
       const parsed = Date.parse(startAt);
       if (Number.isNaN(parsed)) throw new HttpError(400, 'Date de début invalide.');
       if (parsed < Date.now()) throw new HttpError(400, 'La date de début est déjà passée.');
+      if (parsed > Date.now() + BOOKING_HORIZON_DAYS * 24 * 3600000) {
+        throw new HttpError(400, `Réservation possible jusqu’à ${BOOKING_HORIZON_DAYS} jours à l’avance.`);
+      }
       start = new Date(parsed).toISOString();
+      const { week } = await getWeek(db, instructor.user_id);
+      if (!fitsWeek(week, start, Number(durationMin))) {
+        throw new HttpError(409, 'Le moniteur n’est pas disponible à cette heure. Choisis un créneau proposé.');
+      }
     }
 
     const duration = Number(durationMin);
@@ -196,6 +216,102 @@ export function bookingRoutes(db) {
       );
     });
     res.json({ booking: serializeBooking(await findBooking(row.id), 'student') });
+  });
+
+  // ——— Fiche de suivi des compétences ———
+  // Grille de la catégorie, niveaux actuels de l'élève et niveaux notés pour cette leçon.
+  router.get('/:id/skills', async (req, res) => {
+    const row = await loadOwnBooking(req);
+    const current = await latestSkillLevels(db, row.student_id, row.category);
+    const forLesson = await db.all(
+      'SELECT skill_id, level FROM skill_assessments WHERE booking_id = ?',
+      row.id,
+    );
+    const lessonLevels = Object.fromEntries(forLesson.map((r) => [r.skill_id, r.level]));
+    res.json({
+      category: row.category,
+      levels: SKILL_LEVELS,
+      skills: skillsForCategory(row.category).map((skill) => ({
+        ...skill,
+        level: current[skill.id]?.level ?? 0,
+        lessonLevel: lessonLevels[skill.id] ?? null,
+      })),
+    });
+  });
+
+  router.post('/:id/skills', requireAuth('instructor'), async (req, res) => {
+    const row = await loadOwnBooking(req);
+    if (!['in_progress', 'completed'].includes(row.status)) {
+      throw new HttpError(409, 'La fiche se remplit pendant ou après la leçon.');
+    }
+    const raw = req.body?.levels;
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new HttpError(400, 'Niveaux invalides.');
+    const known = new Set(skillsForCategory(row.category).map((sk) => sk.id));
+    const entries = Object.entries(raw).filter(([id]) => known.has(id));
+    if (!entries.length) throw new HttpError(400, 'Aucune compétence reconnue.');
+    for (const [, level] of entries) {
+      if (!Number.isInteger(level) || level < 0 || level > 3) throw new HttpError(400, 'Niveau entre 0 et 3.');
+    }
+    await db.transaction(async (tx) => {
+      for (const [skillId, level] of entries) {
+        await tx.run(
+          `INSERT INTO skill_assessments (booking_id, student_id, instructor_id, category, skill_id, level)
+             VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT (booking_id, skill_id) DO UPDATE SET level = excluded.level, created_at = datetime('now')`,
+          row.id,
+          row.student_id,
+          row.instructor_id,
+          row.category,
+          skillId,
+          level,
+        );
+      }
+    });
+    res.json({ saved: entries.length });
+  });
+
+  // ——— Messagerie de la leçon ———
+  const CLOSED_FOR_MESSAGES = ['declined', 'expired'];
+
+  router.get('/:id/messages', async (req, res) => {
+    const row = await loadOwnBooking(req);
+    // Les messages de l'autre partie sont marqués comme lus.
+    await db.run(
+      `UPDATE messages SET read_at = datetime('now') WHERE booking_id = ? AND sender_id != ? AND read_at IS NULL`,
+      row.id,
+      req.user.id,
+    );
+    const messages = await db.all(
+      `SELECT m.id, m.body, m.created_at AS createdAt, m.sender_id AS senderId, u.first_name AS senderName
+         FROM messages m JOIN users u ON u.id = m.sender_id
+         WHERE m.booking_id = ? ORDER BY m.id DESC LIMIT 200`,
+      row.id,
+    );
+    res.json({
+      canWrite: !CLOSED_FOR_MESSAGES.includes(row.status),
+      messages: messages.reverse().map((m) => ({ ...m, mine: m.senderId === req.user.id })),
+    });
+  });
+
+  router.post('/:id/messages', async (req, res) => {
+    const row = await loadOwnBooking(req);
+    if (CLOSED_FOR_MESSAGES.includes(row.status)) throw new HttpError(409, 'Cette conversation est fermée.');
+    const body = text(req.body?.body, 1000);
+    if (!body) throw new HttpError(400, 'Message vide.');
+    // Anti-abus simple : 30 messages par leçon et par minute au plus.
+    const { n } = await db.get(
+      `SELECT COUNT(*) AS n FROM messages WHERE booking_id = ? AND sender_id = ? AND created_at >= datetime('now', '-1 minute')`,
+      row.id,
+      req.user.id,
+    );
+    if (n >= 30) throw new HttpError(429, 'Trop de messages. Patiente un instant.');
+    const { lastInsertRowid } = await db.run(
+      'INSERT INTO messages (booking_id, sender_id, body) VALUES (?, ?, ?)',
+      row.id,
+      req.user.id,
+      body,
+    );
+    res.status(201).json({ message: { id: lastInsertRowid, body, mine: true, createdAt: new Date().toISOString() } });
   });
 
   router.post('/:id/feedback', requireAuth('instructor'), async (req, res) => {

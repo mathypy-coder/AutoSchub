@@ -20,6 +20,15 @@ avec un module de **théorie** intégré.
 - **Centres d’examen** : les 32 centres agréés (2 à Bruxelles, 14 en Wallonie, 16 en Flandre) affichés sur la carte
   de réservation, et un onglet de recherche (ville, code postal, opérateur, Région, tri par distance) avec itinéraire,
   lien de prise de rendez-vous et réservation d’une leçon près du centre. Coordonnées GPS approximatives.
+- **Réservation sur créneaux** : chaque moniteur définit ses disponibilités hebdomadaires (heure belge) ;
+  l’élève choisit un jour puis un créneau libre (les leçons déjà prévues sont exclues, réservation jusqu’à 60 jours).
+- **Fiche de suivi des compétences** : après chaque leçon, le moniteur note chaque compétence de 0 à 3
+  (installation, priorités, ronds-points, créneau, autoroute… adaptées à la moto, au camion, au bus ou au tracteur).
+  L’élève voit sa fiche dans son profil ; le parcours du pack inclut « 80 % des compétences maîtrisées ».
+- **Messagerie** élève ↔ moniteur par leçon, avec compteur de messages non lus.
+- **Agenda** : ajout d’une leçon au calendrier du téléphone (.ics avec rappel 1 h avant) ; « Réserver à nouveau ».
+- **Théorie adaptative** : les questions ratées reviennent en révision jusqu’à deux bonnes réponses d’affilée,
+  réussite par thème et score de préparation (objectif 85 %).
 - **Théorie** : entraînement par thème et examens blancs au barème belge (réussite à 41/50, faute grave = 5 points),
   correction détaillée et historique.
 
@@ -131,6 +140,10 @@ Couvre l’inscription/connexion, la recherche géographique, tout le cycle d’
 | GET | `/api/subscriptions/plans`, `/api/subscriptions/me`, `/api/bookings/quote` | — / élève |
 | POST | `/api/subscriptions`, `/api/subscriptions/me/plan`, `/api/subscriptions/me/cancel` · PATCH `/api/subscriptions/me/journey` | élève |
 | GET | `/api/exam-centers?q&region&lat&lng` | — |
+| GET | `/api/instructors/:id/slots?date&durationMin`, `/api/config` | — |
+| GET/PUT | `/api/instructors/me/availability` | moniteur |
+| GET/POST | `/api/bookings/:id/skills`, `/api/bookings/:id/messages` · GET `/api/progress/skills` | élève / moniteur |
+| GET | `/api/theory/insights`, `/api/theory/quiz?mode=review` | élève |
 | GET | `/api/theory/categories`, `/api/theory/quiz`, POST `/api/theory/submit`, GET `/api/theory/history` | — |
 
 ## Pistes pour la suite

@@ -92,6 +92,59 @@ CREATE TABLE IF NOT EXISTS login_attempts (
   first_at INTEGER NOT NULL
 );
 
+-- Fiche de suivi : niveau de chaque compétence évalué par le moniteur après une leçon.
+CREATE TABLE IF NOT EXISTS skill_assessments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  booking_id INTEGER NOT NULL REFERENCES bookings(id),
+  student_id INTEGER NOT NULL REFERENCES users(id),
+  instructor_id INTEGER NOT NULL REFERENCES users(id),
+  category TEXT NOT NULL,
+  skill_id TEXT NOT NULL,
+  level INTEGER NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (booking_id, skill_id)
+);
+CREATE INDEX IF NOT EXISTS idx_skills_student ON skill_assessments(student_id, category);
+
+-- Théorie adaptative : questions ratées à revoir (répétition espacée) et réussite par thème.
+CREATE TABLE IF NOT EXISTS theory_mistakes (
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  question_id TEXT NOT NULL,
+  category TEXT NOT NULL,
+  wrong_count INTEGER NOT NULL DEFAULT 0,
+  streak INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (user_id, question_id, category)
+);
+CREATE TABLE IF NOT EXISTS theory_theme_stats (
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  category TEXT NOT NULL,
+  theme TEXT NOT NULL,
+  answered INTEGER NOT NULL DEFAULT 0,
+  correct INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (user_id, category, theme)
+);
+
+-- Disponibilités hebdomadaires du moniteur (une plage par jour, heure de Bruxelles, en minutes).
+CREATE TABLE IF NOT EXISTS instructor_availability (
+  instructor_id INTEGER NOT NULL REFERENCES users(id),
+  weekday INTEGER NOT NULL CHECK (weekday BETWEEN 0 AND 6),
+  start_min INTEGER NOT NULL,
+  end_min INTEGER NOT NULL,
+  PRIMARY KEY (instructor_id, weekday)
+);
+
+-- Messagerie élève ↔ moniteur, rattachée à une leçon.
+CREATE TABLE IF NOT EXISTS messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  booking_id INTEGER NOT NULL REFERENCES bookings(id),
+  sender_id INTEGER NOT NULL REFERENCES users(id),
+  body TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  read_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_messages_booking ON messages(booking_id, id);
+
 CREATE TABLE IF NOT EXISTS app_meta (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
@@ -99,7 +152,7 @@ CREATE TABLE IF NOT EXISTS app_meta (
 `;
 
 // À incrémenter à chaque changement de SCHEMA ou d'ADDED_COLUMNS.
-export const SCHEMA_VERSION = '5';
+export const SCHEMA_VERSION = '6';
 
 // Colonnes ajoutées après la première version : migration des bases existantes.
 const ADDED_COLUMNS = {
