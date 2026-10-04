@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { ErrorMessage } from '../components/ui.jsx';
+import { useServerConfig } from '../hooks.js';
 
 const DEMO_ACCOUNTS = [
   { label: 'Démo élève', email: 'eleve@autoschub.be' },
@@ -17,13 +17,9 @@ export default function Login() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   // Comptes de démo proposés seulement s'ils existent sur ce serveur.
-  const [demo, setDemo] = useState(false);
-
-  useEffect(() => {
-    api('/config', { auth: false })
-      .then((c) => setDemo(Boolean(c.demo)))
-      .catch(() => setDemo(false));
-  }, []);
+  const config = useServerConfig();
+  const demo = Boolean(config?.demo);
+  const temporary = config?.persistent === false;
 
   const submit = async (e, creds = { email, password }) => {
     e?.preventDefault();
@@ -32,7 +28,12 @@ export default function Login() {
     try {
       await login(creds.email, creds.password);
     } catch (err) {
-      setError(err.message);
+      // Base temporaire : un compte créé avant un redémarrage n'existe plus. On le dit clairement.
+      setError(
+        err.status === 401 && temporary
+          ? 'Compte introuvable ou mot de passe incorrect. Sur ce serveur de démonstration, les comptes créés sont temporaires : réinscris-toi ou utilise un compte de démo ci-dessous.'
+          : err.message,
+      );
       setBusy(false);
     }
   };
@@ -44,6 +45,11 @@ export default function Login() {
       </Link>
       <h1>Connexion</h1>
       {notice && <p className="notice">{notice}</p>}
+      {temporary && (
+        <p className="notice">
+          Mode démonstration : les comptes et réservations créés sont temporaires et peuvent disparaître.
+        </p>
+      )}
       <form onSubmit={submit} className="form">
         <label>
           E-mail

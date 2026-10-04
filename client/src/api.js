@@ -30,7 +30,10 @@ export async function api(path, { method = 'GET', body, auth = true } = {}) {
   });
   const data = await res.json().catch(() => ({}));
   // Connexion refusée par le serveur (session expirée, nouveau déploiement…).
-  if (res.status === 401 && token) window.dispatchEvent(new Event('autoschub:session-expired'));
+  // (Un 401 de connexion/inscription = mauvais identifiants, pas une session expirée.)
+  if (res.status === 401 && token && !/^\/auth\/(login|register)/.test(path)) {
+    window.dispatchEvent(new Event('autoschub:session-expired'));
+  }
   if (!res.ok) {
     const error = new Error([data.error || `Erreur ${res.status}`, data.detail].filter(Boolean).join(' — '));
     error.status = res.status;

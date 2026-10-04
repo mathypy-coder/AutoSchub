@@ -44,7 +44,12 @@ export function createApp(db) {
   // Configuration publique pour l'app (ex. afficher ou non les comptes de démo).
   app.get('/api/config', (_req, res) => {
     res.set('Cache-Control', 'public, max-age=60, s-maxage=300');
-    res.json({ demo: demoEnabled() && process.env.DEMO_LOGIN !== '0' });
+    res.json({
+      demo: demoEnabled() && process.env.DEMO_LOGIN !== '0',
+      // Sur Vercel sans base Turso, chaque instance a sa propre base temporaire :
+      // les comptes créés peuvent disparaître. L'app l'indique clairement.
+      persistent: db.isRemote || !process.env.VERCEL,
+    });
   });
   app.get('/api/permits', cachePublic, (_req, res) => res.json({ groups: PERMIT_GROUPS, permits: PERMITS }));
   app.get(['/api/exam-centers', '/api/subscriptions/plans', '/api/theory/categories'], cachePublic);

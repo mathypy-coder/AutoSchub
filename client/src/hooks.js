@@ -65,3 +65,21 @@ export function usePosition(initial = null) {
 
   return { position, setPosition, located };
 }
+
+// Configuration publique du serveur (comptes de démo, stockage persistant ou non), chargée une fois.
+let configPromise = null;
+export function useServerConfig() {
+  const [config, setConfig] = useState(null);
+  useEffect(() => {
+    configPromise ??= api('/config', { auth: false }).catch(() => {
+      configPromise = null;
+      return null;
+    });
+    let alive = true;
+    configPromise.then((c) => alive && setConfig(c));
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return config;
+}
