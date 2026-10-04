@@ -3,6 +3,8 @@ import { requireAuth } from '../auth.js';
 import { HttpError } from '../errors.js';
 import { serializeBooking } from '../serializers.js';
 import { quoteLesson } from '../subscriptions.js';
+import { BLOCKING_STATUSES, expireStaleBookings } from '../bookingRules.js';
+import { optionalText, text } from '../validation.js';
 
 const BOOKING_SELECT = `
   SELECT b.*,
@@ -15,7 +17,6 @@ const BOOKING_SELECT = `
   JOIN instructors i ON i.user_id = b.instructor_id`;
 
 const ALLOWED_DURATIONS = [60, 90, 120];
-const BLOCKING_STATUSES = ['pending', 'accepted', 'en_route', 'in_progress'];
 
 // Cycle de vie d'une leçon, comme une course Uber :
 // demandée → acceptée → moniteur en route → en cours → terminée.
@@ -35,11 +36,16 @@ const overlaps = (startA, durA, startB, durB) => {
 export function bookingRoutes(db) {
   const router = Router();
   router.use(requireAuth());
+  router.use(async (_req, _res, next) => {
+    await expireStaleBookings(db);
+    next();
+  });
 
   const findBooking = (id) => db.get(`${BOOKING_SELECT} WHERE b.id = ?`, id);
 
   const loadOwnBooking = async (req) => {
-    const row = await findBooking(Number(req.params.id));
+    const id = Number(req.params.id);
+    const row = Number.isInteger(id) ? await findBooking(id) : undefined;
     const ownerColumn = req.user.role === 'student' ? 'student_id' : 'instructor_id';
     if (!row || row[ownerColumn] !== req.user.id) throw new HttpError(404, 'Leçon introuvable.');
     return row;
@@ -76,13 +82,14 @@ export function bookingRoutes(db) {
     const { instructorId, category, startAt, durationMin = 60, pickupAddress, pickupLat, pickupLng } = req.body ?? {};
     const instructor = await db.get('SELECT * FROM instructors WHERE user_id = ?', Number(instructorId));
     if (!instructor) throw new HttpError(404, 'Moniteur introuvable.');
-    if (!JSON.parse(instructor.categories).includes(category)) {
+    if (typeof category !== 'string' || !JSON.parse(instructor.categories).includes(category)) {
       throw new HttpError(400, `Ce moniteur n’enseigne pas la catégorie ${category ?? '?'}.`);
     }
     if (!ALLOWED_DURATIONS.includes(Number(durationMin))) {
       throw new HttpError(400, 'Durée invalide (60, 90 ou 120 minutes).');
     }
-    if (!pickupAddress?.trim()) throw new HttpError(400, 'Adresse de prise en charge requise.');
+    const address = text(pickupAddress, 200);
+    if (!address) throw new HttpError(400, 'Adresse de prise en charge requise.');
 
     const isInstant = !startAt;
     let start;
@@ -98,14 +105,23 @@ export function bookingRoutes(db) {
 
     const duration = Number(durationMin);
     const id = await db.transaction(async (tx) => {
+      // Créneaux occupés du moniteur, mais aussi de l'élève (pas deux leçons en même temps).
       const busy = await tx.all(
-        `SELECT start_at, duration_min FROM bookings
-           WHERE instructor_id = ? AND status IN (${BLOCKING_STATUSES.map(() => '?').join(',')})`,
+        `SELECT instructor_id, start_at, duration_min FROM bookings
+           WHERE (instructor_id = ? OR student_id = ?)
+             AND status IN (${BLOCKING_STATUSES.map(() => '?').join(',')})`,
         instructor.user_id,
+        req.user.id,
         ...BLOCKING_STATUSES,
       );
-      if (busy.some((b) => overlaps(start, duration, b.start_at, b.duration_min))) {
-        throw new HttpError(409, 'Ce créneau n’est plus disponible.');
+      const clash = busy.find((b) => overlaps(start, duration, b.start_at, b.duration_min));
+      if (clash) {
+        throw new HttpError(
+          409,
+          clash.instructor_id === instructor.user_id
+            ? 'Ce créneau n’est plus disponible.'
+            : 'Tu as déjà une leçon prévue sur ce créneau.',
+        );
       }
       // Le moniteur touche toujours le prix de la leçon ; le pack de l'élève
       // couvre des heures incluses et/ou une réduction sur sa part.
@@ -121,7 +137,7 @@ export function bookingRoutes(db) {
         start,
         duration,
         isInstant ? 1 : 0,
-        pickupAddress.trim(),
+        address,
         Number.isFinite(Number(pickupLat)) ? Number(pickupLat) : null,
         Number.isFinite(Number(pickupLng)) ? Number(pickupLng) : null,
         quote.lessonCents,
@@ -144,7 +160,14 @@ export function bookingRoutes(db) {
     if (allowedBy !== 'any' && allowedBy !== req.user.role) {
       throw new HttpError(403, 'Action non autorisée pour votre rôle.');
     }
-    await db.run(`UPDATE bookings SET status = ?, updated_at = datetime('now') WHERE id = ?`, next, row.id);
+    // Mise à jour conditionnelle : si l'autre partie a changé le statut entre-temps, on refuse.
+    const { changes } = await db.run(
+      `UPDATE bookings SET status = ?, updated_at = datetime('now') WHERE id = ? AND status = ?`,
+      next,
+      row.id,
+      row.status,
+    );
+    if (!changes) throw new HttpError(409, 'La leçon a changé entre-temps. Rafraîchis la page.');
     res.json({ booking: serializeBooking(await findBooking(row.id), req.user.role) });
   });
 
@@ -157,12 +180,15 @@ export function bookingRoutes(db) {
       throw new HttpError(400, 'La note doit être comprise entre 1 et 5.');
     }
     await db.transaction(async (tx) => {
-      await tx.run(
-        `UPDATE bookings SET student_rating = ?, student_comment = ?, updated_at = datetime('now') WHERE id = ?`,
+      // Condition « pas encore notée » dans la requête : deux envois simultanés ne comptent qu'une fois.
+      const { changes } = await tx.run(
+        `UPDATE bookings SET student_rating = ?, student_comment = ?, updated_at = datetime('now')
+           WHERE id = ? AND student_rating IS NULL`,
         ratingValue,
-        req.body?.comment?.trim() || null,
+        optionalText(req.body?.comment, 1000),
         row.id,
       );
+      if (!changes) throw new HttpError(409, 'Cette leçon a déjà été notée.');
       await tx.run(
         'UPDATE instructors SET rating_sum = rating_sum + ?, rating_count = rating_count + 1 WHERE user_id = ?',
         ratingValue,
@@ -175,7 +201,7 @@ export function bookingRoutes(db) {
   router.post('/:id/feedback', requireAuth('instructor'), async (req, res) => {
     const row = await loadOwnBooking(req);
     if (row.status !== 'completed') throw new HttpError(409, 'Le retour se donne après la leçon.');
-    const feedback = String(req.body?.feedback ?? '').trim();
+    const feedback = text(req.body?.feedback, 2000);
     if (!feedback) throw new HttpError(400, 'Le retour ne peut pas être vide.');
     await db.run(
       `UPDATE bookings SET instructor_feedback = ?, updated_at = datetime('now') WHERE id = ?`,

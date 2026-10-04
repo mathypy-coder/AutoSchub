@@ -5,18 +5,23 @@ import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from
 // Ordre : AUTH_SECRET, puis dérivé du jeton Turso, puis secret généré au build de la
 // fonction Vercel (commun à toutes ses instances, renouvelé à chaque déploiement).
 function resolveSecret() {
-  if (process.env.AUTH_SECRET) return process.env.AUTH_SECRET;
+  if (process.env.AUTH_SECRET) return { secret: process.env.AUTH_SECRET, source: 'AUTH_SECRET' };
   if (process.env.TURSO_AUTH_TOKEN) {
-    return createHash('sha256').update(`autoschub-auth:${process.env.TURSO_AUTH_TOKEN}`).digest('hex');
+    return {
+      secret: createHash('sha256').update(`autoschub-auth:${process.env.TURSO_AUTH_TOKEN}`).digest('hex'),
+      source: 'turso',
+    };
   }
-  if (process.env.AUTOSCHUB_BUILD_SECRET) return process.env.AUTOSCHUB_BUILD_SECRET;
+  if (process.env.AUTOSCHUB_BUILD_SECRET) return { secret: process.env.AUTOSCHUB_BUILD_SECRET, source: 'build' };
   if (process.env.VERCEL) {
     console.warn('AUTH_SECRET non défini : les connexions ne survivront pas aux redémarrages des fonctions.');
   }
-  return randomBytes(32).toString('hex');
+  return { secret: randomBytes(32).toString('hex'), source: 'aléatoire' };
 }
 
-const SECRET = resolveSecret();
+const { secret: SECRET, source: SECRET_SOURCE } = resolveSecret();
+// Pour le diagnostic (/api/health) : d'où vient le secret, jamais sa valeur.
+export { SECRET_SOURCE };
 const TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 export function hashPassword(password) {
@@ -25,7 +30,10 @@ export function hashPassword(password) {
   return `${salt}:${hash}`;
 }
 
-export function verifyPassword(password, stored) {
+// Hash factice : même durée de calcul quand l'e-mail n'existe pas (pas d'énumération des comptes).
+const DUMMY_HASH = hashPassword(randomBytes(16).toString('hex'));
+
+export function verifyPassword(password, stored = DUMMY_HASH) {
   const [salt, hash] = stored.split(':');
   const candidate = scryptSync(password, salt, 64);
   const expected = Buffer.from(hash, 'hex');
@@ -36,14 +44,18 @@ function sign(data) {
   return createHmac('sha256', SECRET).update(data).digest('base64url');
 }
 
-export function createToken(user) {
-  const payload = Buffer.from(
-    JSON.stringify({ uid: user.id, role: user.role, exp: Date.now() + TOKEN_TTL_MS }),
-  ).toString('base64url');
+// Jeton signé générique : session, mais aussi quiz d'examen délivré par le serveur.
+export function createSignedToken(data) {
+  const payload = Buffer.from(JSON.stringify(data)).toString('base64url');
   return `${payload}.${sign(payload)}`;
 }
 
-export function readToken(token) {
+export function createToken(user) {
+  return createSignedToken({ uid: user.id, role: user.role, exp: Date.now() + TOKEN_TTL_MS });
+}
+
+// type : undefined pour une session, 'quiz' pour un quiz… Un jeton n'est accepté que pour son usage.
+export function readToken(token, type) {
   if (typeof token !== 'string') return null;
   const [payload, signature] = token.split('.');
   if (!payload || !signature) return null;
@@ -52,7 +64,7 @@ export function readToken(token) {
   if (expected.length !== given.length || !timingSafeEqual(expected, given)) return null;
   try {
     const data = JSON.parse(Buffer.from(payload, 'base64url').toString());
-    if (data.exp < Date.now()) return null;
+    if (data.typ !== type || !(data.exp >= Date.now())) return null;
     return data;
   } catch {
     return null;

@@ -10,26 +10,47 @@ export const addDays = (iso, days) => new Date(Date.parse(iso) + days * DAY_MS).
 
 // Renouvelle (ou clôture) l'abonnement si sa période est échue.
 // Le renouvellement est calculé à la lecture : pas besoin de tâche planifiée.
+// Un changement de formule demandé en cours de mois prend effet au renouvellement :
+// les heures incluses d'une formule supérieure ne sont pas données avant d'être payées.
 async function refreshPeriod(db, sub, now = Date.now()) {
-  let { current_period_start: start, current_period_end: end } = sub;
+  let { current_period_start: start, current_period_end: end, plan_id: planId, pending_plan_id: pending } = sub;
   let status = sub.status;
   while (status === 'active' && Date.parse(end) <= now) {
-    if (sub.cancel_at_period_end) {
+    if (sub.license_obtained_at) {
+      status = 'completed';
+    } else if (sub.cancel_at_period_end) {
       status = 'cancelled';
     } else {
       start = end;
       end = addDays(end, PERIOD_DAYS);
+      if (pending) {
+        planId = pending;
+        pending = null;
+      }
     }
   }
   if (status !== sub.status || start !== sub.current_period_start) {
+    // Condition sur la période lue : deux lectures simultanées ne renouvellent qu'une fois.
     await db.run(
-      'UPDATE subscriptions SET status = ?, current_period_start = ?, current_period_end = ? WHERE id = ?',
+      `UPDATE subscriptions SET status = ?, current_period_start = ?, current_period_end = ?, plan_id = ?,
+         pending_plan_id = ?
+       WHERE id = ? AND current_period_start = ?`,
       status,
       start,
       end,
+      planId,
+      pending ?? null,
       sub.id,
+      sub.current_period_start,
     );
-    return { ...sub, status, current_period_start: start, current_period_end: end };
+    return {
+      ...sub,
+      status,
+      current_period_start: start,
+      current_period_end: end,
+      plan_id: planId,
+      pending_plan_id: pending ?? null,
+    };
   }
   return sub;
 }
@@ -178,6 +199,8 @@ export async function serializeSubscription(db, sub) {
     currentPeriodStart: sub.current_period_start,
     currentPeriodEnd: sub.current_period_end,
     cancelAtPeriodEnd: Boolean(sub.cancel_at_period_end),
+    pendingPlan: sub.pending_plan_id ? (PLANS_BY_ID.get(sub.pending_plan_id) ?? null) : null,
+    licenseObtained: Boolean(sub.license_obtained_at),
     includedMinutes: plan.includedMinutes,
     usedMinutes: used,
     remainingMinutes: Math.max(0, plan.includedMinutes - used),

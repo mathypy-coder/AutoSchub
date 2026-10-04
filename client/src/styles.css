@@ -379,7 +379,8 @@ textarea:focus {
   color: var(--accent);
 }
 .badge-declined,
-.badge-cancelled {
+.badge-cancelled,
+.badge-expired {
   background: var(--danger-soft);
   color: var(--danger);
 }

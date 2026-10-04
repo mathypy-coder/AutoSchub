@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, formatDateTime } from '../../api.js';
 import { Chips, ErrorMessage } from '../../components/ui.jsx';
@@ -11,6 +11,9 @@ export default function Theory() {
   const [history, setHistory] = useState([]);
   const [freeExamsLeft, setFreeExamsLeft] = useState(null);
   const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  // Garde synchrone : un double clic ou la fin du chrono pendant l'envoi ne corrige pas deux fois.
+  const submittingRef = useRef(false);
 
   const loadHistory = () =>
     api('/theory/history')
@@ -37,26 +40,33 @@ export default function Theory() {
   };
 
   const finish = async (answers) => {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    setSubmitting(true);
+    setError('');
     try {
       const res = await api('/theory/submit', {
         method: 'POST',
-        body: {
-          category: quiz.category,
-          mode: quiz.mode,
-          theme: quiz.theme,
-          questionIds: quiz.questions.map((q) => q.id),
-          answers,
-        },
+        body: { quizToken: quiz.quizToken, answers },
       });
       setResult(res);
       setQuiz(null);
       loadHistory();
     } catch (err) {
       setError(err.message);
+      // Quiz expiré ou déjà corrigé : inutile de rester dessus.
+      if ([400, 402, 403, 409].includes(err.status)) setQuiz(null);
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
     }
   };
 
-  if (quiz) return <Quiz quiz={quiz} onFinish={finish} onQuit={() => setQuiz(null)} />;
+  if (quiz) {
+    return (
+      <Quiz quiz={quiz} error={error} submitting={submitting} onFinish={finish} onQuit={() => setQuiz(null)} />
+    );
+  }
   if (result) return <Result result={result} onBack={() => setResult(null)} />;
 
   const current = meta?.categories.find((c) => c.code === category);
@@ -136,7 +146,7 @@ export default function Theory() {
   );
 }
 
-function Quiz({ quiz, onFinish, onQuit }) {
+function Quiz({ quiz, error, submitting, onFinish, onQuit }) {
   const [index, setIndex] = useState(0);
   const [answers, setAnswers] = useState({});
   const [secondsLeft, setSecondsLeft] = useState(quiz.durationMinutes ? quiz.durationMinutes * 60 : null);
@@ -188,13 +198,14 @@ function Quiz({ quiz, onFinish, onQuit }) {
           </button>
         ))}
       </div>
+      <ErrorMessage error={error} />
       <div className="row quiz-nav">
         <button type="button" className="btn btn-secondary" disabled={index === 0} onClick={() => setIndex(index - 1)}>
           ← Précédente
         </button>
         {isLast ? (
-          <button type="button" className="btn btn-primary" onClick={() => onFinish(answers)}>
-            Terminer
+          <button type="button" className="btn btn-primary" disabled={submitting} onClick={() => onFinish(answers)}>
+            {submitting ? 'Correction…' : 'Terminer'}
           </button>
         ) : (
           <button type="button" className="btn btn-primary" onClick={() => setIndex(index + 1)}>

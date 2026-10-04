@@ -4,8 +4,7 @@ import { PERMIT_CODES } from '../data/permits.js';
 import { FREE_EXAMS_PER_WEEK, PERIOD_DAYS, PLANS, PLANS_BY_ID, TARGET_HOURS } from '../data/plans.js';
 import { HttpError } from '../errors.js';
 import { addDays, buildJourney, getActiveSubscription, serializeSubscription } from '../subscriptions.js';
-
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+import { isIsoDate } from '../validation.js';
 
 export function subscriptionRoutes(db) {
   const router = Router();
@@ -41,30 +40,36 @@ export function subscriptionRoutes(db) {
     const { planId, category } = req.body ?? {};
     if (!PLANS_BY_ID.has(planId)) throw new HttpError(400, 'Pack inconnu.');
     if (!PERMIT_CODES.includes(category)) throw new HttpError(400, 'Catégorie de permis invalide.');
-    if (await getActiveSubscription(db, req.user.id)) {
-      throw new HttpError(409, 'Tu as déjà un pack actif. Change de formule depuis ton pack.');
-    }
     const now = new Date().toISOString();
-    const { lastInsertRowid } = await db.run(
-      `INSERT INTO subscriptions (student_id, plan_id, category, current_period_start, current_period_end, created_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-      req.user.id,
-      planId,
-      category,
-      now,
-      addDays(now, PERIOD_DAYS),
-      now,
-    );
+    // Vérification et création dans la même transaction : pas deux packs actifs en cas de double clic.
+    const lastInsertRowid = await db.transaction(async (tx) => {
+      if (await getActiveSubscription(tx, req.user.id)) {
+        throw new HttpError(409, 'Tu as déjà un pack actif. Change de formule depuis ton pack.');
+      }
+      const inserted = await tx.run(
+        `INSERT INTO subscriptions (student_id, plan_id, category, current_period_start, current_period_end, created_at)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+        req.user.id,
+        planId,
+        category,
+        now,
+        addDays(now, PERIOD_DAYS),
+        now,
+      );
+      return inserted.lastInsertRowid;
+    });
     res.status(201);
     await respond(res, await db.get('SELECT * FROM subscriptions WHERE id = ?', lastInsertRowid));
   });
 
+  // Changement de formule : appliqué au prochain renouvellement (choisir la formule actuelle annule le changement).
   router.post('/me/plan', async (req, res) => {
     const sub = await current(req);
     const { planId } = req.body ?? {};
     if (!PLANS_BY_ID.has(planId)) throw new HttpError(400, 'Pack inconnu.');
-    await db.run('UPDATE subscriptions SET plan_id = ? WHERE id = ?', planId, sub.id);
-    await respond(res, { ...sub, plan_id: planId });
+    const pending = planId === sub.plan_id ? null : planId;
+    await db.run('UPDATE subscriptions SET pending_plan_id = ? WHERE id = ?', pending, sub.id);
+    await respond(res, { ...sub, pending_plan_id: pending });
   });
 
   router.post('/me/cancel', async (req, res) => {
@@ -85,9 +90,12 @@ export function subscriptionRoutes(db) {
       ['licenseObtainedAt', 'license_obtained_at'],
     ]) {
       if (body[key] === undefined) continue;
-      if (body[key] !== null && !DATE_RE.test(body[key])) throw new HttpError(400, 'Date invalide (AAAA-MM-JJ).');
+      if (body[key] !== null && !isIsoDate(body[key])) throw new HttpError(400, 'Date invalide (AAAA-MM-JJ).');
       updates[column] = body[key];
     }
+    // Permis obtenu : plus de renouvellement, le pack se termine à la fin de la période déjà payée
+    // (et non immédiatement, ce qui permettrait de reprendre aussitôt un pack aux heures neuves).
+    if (updates.license_obtained_at) updates.cancel_at_period_end = 1;
     const columns = Object.keys(updates);
     if (!columns.length) throw new HttpError(400, 'Rien à mettre à jour.');
     await db.run(
@@ -95,13 +103,7 @@ export function subscriptionRoutes(db) {
       ...Object.values(updates),
       sub.id,
     );
-    let updated = await db.get('SELECT * FROM subscriptions WHERE id = ?', sub.id);
-    // Permis obtenu : le parcours est terminé, l'abonnement s'arrête.
-    if (updated.license_obtained_at) {
-      await db.run(`UPDATE subscriptions SET status = 'completed' WHERE id = ?`, sub.id);
-      updated = { ...updated, status: 'completed' };
-    }
-    await respond(res, updated);
+    await respond(res, await db.get('SELECT * FROM subscriptions WHERE id = ?', sub.id));
   });
 
   return router;

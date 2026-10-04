@@ -181,8 +181,16 @@ export async function seedDemoPack(db) {
 }
 
 // Données de démo au démarrage : comptes de base, puis élève avec pack (désactivable avec DEMO_PACK=0).
+// Les comptes de démo ont un mot de passe public : activés par défaut en local seulement.
+// En production (Vercel ou base Turso), il faut les demander explicitement avec SEED=1.
+export function demoEnabled(env = process.env) {
+  if (env.SEED === '0') return false;
+  if (env.SEED === '1') return true;
+  return !env.VERCEL && !env.TURSO_DATABASE_URL;
+}
+
 export async function seedDemo(db) {
-  if (process.env.SEED === '0') return;
+  if (!demoEnabled()) return;
   const withPack = process.env.DEMO_PACK !== '0';
   // Déjà fait (mémorisé dans la base) : rien à vérifier, démarrage plus rapide.
   const marker = `v1${withPack ? '+pack' : ''}`;

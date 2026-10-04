@@ -6,6 +6,8 @@ import MapView from '../../components/MapView.jsx';
 import { ErrorMessage, Stars } from '../../components/ui.jsx';
 import { usePolling } from '../../hooks.js';
 
+const POSITION_INTERVAL_MS = 20000;
+
 export default function Dashboard() {
   const { user } = useAuth();
   const { data: profileData, refresh: refreshProfile } = usePolling('/instructors/me/profile', 0);
@@ -19,18 +21,31 @@ export default function Dashboard() {
   const requests = (bookingsData?.bookings ?? []).filter((b) => b.status === 'pending');
 
   // Comme un chauffeur Uber : quand on est en ligne, la position est partagée.
+  // Au plus un envoi toutes les 20 s (chaque envoi réveille la fonction serverless, facturée).
   useEffect(() => {
     if (!online || !navigator.geolocation) return undefined;
+    let lastSent = 0;
+    let latest = null;
+    let timer;
+    const send = () => {
+      timer = undefined;
+      lastSent = Date.now();
+      api('/instructors/me/profile', { method: 'PATCH', body: latest }).catch(() => {});
+    };
     const id = navigator.geolocation.watchPosition(
-      (pos) =>
-        api('/instructors/me/profile', {
-          method: 'PATCH',
-          body: { lat: pos.coords.latitude, lng: pos.coords.longitude },
-        }).catch(() => {}),
+      (pos) => {
+        latest = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        const wait = POSITION_INTERVAL_MS - (Date.now() - lastSent);
+        if (wait <= 0) send();
+        else timer ??= setTimeout(send, wait);
+      },
       () => {},
       { enableHighAccuracy: true, maximumAge: 30000 },
     );
-    return () => navigator.geolocation.clearWatch(id);
+    return () => {
+      navigator.geolocation.clearWatch(id);
+      clearTimeout(timer);
+    };
   }, [online]);
 
   const toggleOnline = async () => {

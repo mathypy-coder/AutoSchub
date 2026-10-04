@@ -85,6 +85,13 @@ CREATE TABLE IF NOT EXISTS subscriptions (
 );
 CREATE INDEX IF NOT EXISTS idx_subscriptions_student ON subscriptions(student_id);
 
+-- Échecs de connexion récents, par adresse IP et e-mail (limite anti-force brute).
+CREATE TABLE IF NOT EXISTS login_attempts (
+  key TEXT PRIMARY KEY,
+  failures INTEGER NOT NULL,
+  first_at INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS app_meta (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
@@ -92,7 +99,7 @@ CREATE TABLE IF NOT EXISTS app_meta (
 `;
 
 // À incrémenter à chaque changement de SCHEMA ou d'ADDED_COLUMNS.
-export const SCHEMA_VERSION = '4';
+export const SCHEMA_VERSION = '5';
 
 // Colonnes ajoutées après la première version : migration des bases existantes.
 const ADDED_COLUMNS = {
@@ -102,7 +109,19 @@ const ADDED_COLUMNS = {
     subscription_id: 'INTEGER REFERENCES subscriptions(id)',
     subscription_period: 'TEXT',
   },
+  subscriptions: {
+    pending_plan_id: 'TEXT',
+  },
+  theory_attempts: {
+    quiz_id: 'TEXT',
+  },
 };
+
+// Index sur des colonnes ajoutées par migration : créés une fois les colonnes présentes.
+const POST_MIGRATION = `
+CREATE INDEX IF NOT EXISTS idx_bookings_subscription ON bookings(subscription_id, subscription_period);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_attempts_quiz ON theory_attempts(quiz_id);
+`;
 
 const toRow = (columns, row) => Object.fromEntries(columns.map((c, i) => [c, row[i]]));
 
@@ -139,7 +158,18 @@ class LocalClient {
     this.lock = Promise.resolve();
   }
 
-  async execute({ sql, args = [] }) {
+  // Une seule connexion : chaque requête et chaque transaction y passe à tour de rôle.
+  // Sans cela, une requête lancée pendant une transaction ouverte en ferait partie
+  // (et serait annulée avec elle en cas de ROLLBACK).
+  async acquire() {
+    const previous = this.lock;
+    let release;
+    this.lock = new Promise((resolve) => (release = resolve));
+    await previous;
+    return release;
+  }
+
+  run({ sql, args = [] }) {
     const stmt = this.sqlite.prepare(sql);
     if (/^\s*(select|pragma|with)\b/i.test(sql) || /\breturning\b/i.test(sql)) {
       const objects = stmt.all(...args);
@@ -150,17 +180,33 @@ class LocalClient {
     return { columns: [], rows: [], rowsAffected: Number(info.changes), lastInsertRowid: info.lastInsertRowid };
   }
 
-  async executeMultiple(sql) {
-    this.sqlite.exec(sql);
+  async execute(query) {
+    const release = await this.acquire();
+    try {
+      return this.run(query);
+    } finally {
+      release();
+    }
   }
 
-  // Une transaction à la fois sur la connexion (les autres attendent leur tour).
+  async executeMultiple(sql) {
+    const release = await this.acquire();
+    try {
+      this.sqlite.exec(sql);
+    } finally {
+      release();
+    }
+  }
+
+  // Les requêtes de la transaction passent par tx.execute (jamais par db.*, qui attendrait la fin de la transaction).
   async transaction() {
-    const previous = this.lock;
-    let release;
-    this.lock = new Promise((resolve) => (release = resolve));
-    await previous;
-    this.sqlite.exec('BEGIN IMMEDIATE');
+    const release = await this.acquire();
+    try {
+      this.sqlite.exec('BEGIN IMMEDIATE');
+    } catch (err) {
+      release(); // base occupée : ne pas bloquer les transactions suivantes
+      throw err;
+    }
     let done = false;
     const finish = (sql) => {
       if (done) return;
@@ -172,7 +218,7 @@ class LocalClient {
       }
     };
     return {
-      execute: (query) => this.execute(query),
+      execute: async (query) => this.run(query),
       commit: async () => finish('COMMIT'),
       rollback: async () => finish('ROLLBACK'),
       close: () => finish('ROLLBACK'),
@@ -268,4 +314,5 @@ async function migrate(db) {
       }
     }
   }
+  await db.exec(POST_MIGRATION);
 }
