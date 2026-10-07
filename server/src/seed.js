@@ -180,6 +180,68 @@ export async function seedDemoPack(db) {
   return true;
 }
 
+export const DEMO_FREE_TRACK_EMAIL = 'eleve.libre@autoschub.be';
+
+/**
+ * Élève de démo en filière libre (pack « Filière libre », permis B, Wallonie) : théorie réussie,
+ * permis provisoire M36 depuis 4 mois, séance avec le guide faite, deux guides, carnet de bord
+ * d'environ 700 km et deux parcours d'entraînement pratiqués autour du centre d'Ottignies.
+ * Ajouté une seule fois, même sur une base existante.
+ */
+export async function seedDemoFreeTrack(db) {
+  if (await db.get('SELECT 1 FROM users WHERE email = ?', DEMO_FREE_TRACK_EMAIL)) return false;
+  await db.transaction(async (tx) => {
+    const { lastInsertRowid: studentId } = await tx.run(
+      INSERT_USER, 'student', 'Emma', 'Lambert', DEMO_FREE_TRACK_EMAIL, hashPassword(DEMO_PASSWORD), '+32 470 00 00 03', 'Wavre',
+    );
+    const provisional = daysFromNow(-122).slice(0, 10);
+    const createdAt = daysFromNow(-20, 9);
+    await tx.run(
+      `INSERT INTO subscriptions (student_id, plan_id, category, current_period_start, current_period_end,
+         provisional_at, created_at)
+       VALUES (?, 'libre', 'B', ?, ?, ?, ?)`,
+      studentId, createdAt, new Date(Date.parse(createdAt) + 30 * 86400000).toISOString(), provisional, createdAt,
+    );
+    await tx.run(
+      `INSERT INTO free_track (user_id, region, category, exam_center_id, provisional_at, guide_session_at, guides)
+       VALUES (?, 'wallonie', 'B', 'ottignies', ?, ?, ?)`,
+      studentId, provisional, daysFromNow(-118).slice(0, 10), JSON.stringify(['Marc (papa)', 'Julie (tante)']),
+    );
+
+    // Théorie : examen blanc réussi avant le permis provisoire.
+    await tx.run(
+      `INSERT INTO theory_attempts (user_id, category, mode, score, max_score, correct, total, grave_faults, passed, created_at)
+       VALUES (?, 'B', 'exam', 43, 50, 44, 50, 0, 1, ?)`,
+      studentId, sqliteDate(daysFromNow(-130)),
+    );
+
+    // Carnet de bord : [jours, minutes, km, conditions, parcours, guide, remarque]
+    const drives = [
+      [-115, 45, 18, ['ville', 'manoeuvres'], null, 'Marc (papa)', 'Premier trajet : parking du supermarché puis quartier calme.'],
+      [-108, 60, 32, ['ville'], null, 'Marc (papa)', 'Démarrages en côte encore hésitants.'],
+      [-99, 75, 48, ['ville', 'campagne'], null, 'Julie (tante)', ''],
+      [-90, 60, 41, ['campagne', 'pluie'], null, 'Marc (papa)', 'Pluie : bien gardé les distances.'],
+      [-81, 90, 72, ['campagne', 'autoroute'], null, 'Marc (papa)', 'Première insertion sur la E411, stressant mais réussi.'],
+      [-70, 50, 30, ['ville', 'trafic'], null, 'Julie (tante)', 'Heure de pointe à Wavre.'],
+      [-61, 40, 9, ['ville', 'examen'], 'ottignies:ville', 'Marc (papa)', 'Boucle urbaine autour du centre : attention aux ronds-points de Louvain-la-Neuve.'],
+      [-52, 80, 64, ['campagne', 'nuit'], null, 'Marc (papa)', 'Conduite de nuit, feux de route / croisement.'],
+      [-40, 45, 21, ['campagne', 'examen'], 'ottignies:mixte', 'Julie (tante)', 'Boucle routes régionales : changements de limitation.'],
+      [-31, 110, 118, ['autoroute', 'trafic'], null, 'Marc (papa)', 'Trajet vers Namur et retour.'],
+      [-18, 60, 44, ['ville', 'campagne', 'manoeuvres'], null, 'Julie (tante)', 'Créneau réussi 3 fois sur 4.'],
+      [-9, 95, 96, ['autoroute', 'pluie'], null, 'Marc (papa)', 'Couloir de secours vu en vrai sur le ring.'],
+      [-3, 70, 55, ['ville', 'campagne'], null, 'Marc (papa)', 'Bonne anticipation, à travailler : les angles morts.'],
+    ];
+    for (const [days, minutes, km, conditions, routeId, guide, notes] of drives) {
+      await tx.run(
+        `INSERT INTO roadbook_entries (user_id, drive_date, duration_min, distance_km, conditions, route_id, guide_name, notes)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        studentId, daysFromNow(days).slice(0, 10), minutes, km, JSON.stringify(conditions), routeId, guide, notes,
+      );
+    }
+  });
+  return true;
+}
+
 // Données de démo au démarrage : comptes de base, puis élève avec pack (désactivable avec DEMO_PACK=0).
 // Les comptes de démo ont un mot de passe public : activés par défaut en local seulement.
 // En production (Vercel ou base Turso), il faut les demander explicitement avec SEED=1.
@@ -249,13 +311,14 @@ export async function seedDemo(db) {
   if (!demoEnabled()) return;
   const withPack = process.env.DEMO_PACK !== '0';
   // Déjà fait (mémorisé dans la base) : rien à vérifier, démarrage plus rapide.
-  const marker = `v2${withPack ? '+pack' : ''}`;
+  const marker = `v3${withPack ? '+pack' : ''}`;
   if (db.meta?.demo_seeded === marker) return;
 
   await seedIfEmpty(db);
   if (withPack) {
     try {
       if (await seedDemoPack(db)) console.log(`Élève de démo avec pack créé : ${DEMO_PACK_EMAIL}.`);
+      if (await seedDemoFreeTrack(db)) console.log(`Élève de démo filière libre créé : ${DEMO_FREE_TRACK_EMAIL}.`);
     } catch (err) {
       if (!/UNIQUE|SQLITE_BUSY|locked/i.test(String(err?.message))) throw err;
     }

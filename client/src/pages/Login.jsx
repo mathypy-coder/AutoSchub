@@ -8,6 +8,7 @@ import { LanguageSwitcher, useT } from '../i18n.jsx';
 const DEMO_ACCOUNTS = [
   { labelKey: 'login.demoStudent', email: 'eleve@autoschub.be' },
   { labelKey: 'login.demoStudentPack', email: 'eleve.pack@autoschub.be' },
+  { labelKey: 'login.demoFreeTrack', email: 'eleve.libre@autoschub.be' },
   { labelKey: 'login.demoInstructor', email: 'moniteur@autoschub.be' },
 ];
 

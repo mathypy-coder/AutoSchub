@@ -80,8 +80,9 @@ AUTH_SECRET=une-longue-valeur-secrète npm start
 ```
 
 Comptes de démo (mot de passe `demo1234`) : `eleve@autoschub.be` (sans pack), `eleve.pack@autoschub.be`
-(pack Intégral permis B déjà avancé : théorie réussie, permis provisoire, 8 h de conduite, une leçon à venir)
-et `moniteur@autoschub.be`
+(pack Intégral permis B déjà avancé : théorie réussie, permis provisoire, 8 h de conduite, une leçon à venir),
+`eleve.libre@autoschub.be` (pack Filière libre en Wallonie : permis provisoire M36 depuis 4 mois, deux guides,
+carnet de bord d’environ 650 km, deux parcours pratiqués autour du centre d’Ottignies) et `moniteur@autoschub.be`
 (10 moniteurs répartis à Bruxelles, Gand, Anvers, Liège, Namur, Charleroi, Mons, Eupen…).
 
 Variables d’environnement : `PORT` (3001), `DB_FILE` (`data/autoschub.db`, base locale),

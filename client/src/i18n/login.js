@@ -4,6 +4,7 @@ export default {
     title: 'Connexion',
     demoStudent: 'Démo élève',
     demoStudentPack: 'Démo élève avec pack',
+    demoFreeTrack: 'Démo filière libre',
     demoInstructor: 'Démo moniteur',
     temporaryAccountError:
       'Compte introuvable ou mot de passe incorrect. Sur ce serveur de démonstration, les comptes créés sont temporaires : réinscris-toi ou utilise un compte de démo ci-dessous.',
@@ -20,6 +21,7 @@ export default {
     title: 'Aanmelden',
     demoStudent: 'Demo leerling',
     demoStudentPack: 'Demo leerling met pakket',
+    demoFreeTrack: 'Demo vrije begeleiding',
     demoInstructor: 'Demo instructeur',
     temporaryAccountError:
       'Account niet gevonden of wachtwoord onjuist. Op deze demoserver zijn aangemaakte accounts tijdelijk: registreer je opnieuw of gebruik hieronder een demo-account.',
@@ -36,6 +38,7 @@ export default {
     title: 'Log in',
     demoStudent: 'Demo learner',
     demoStudentPack: 'Demo learner with plan',
+    demoFreeTrack: 'Demo supervised driving',
     demoInstructor: 'Demo instructor',
     temporaryAccountError:
       'Account not found or wrong password. On this demo server, new accounts are temporary: sign up again or use a demo account below.',

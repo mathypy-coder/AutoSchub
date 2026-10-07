@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createApp } from '../src/app.js';
 import { brusselsToUtc } from '../src/time.js';
 import { openDb } from '../src/db.js';
-import { DEMO_PASSWORD, DEMO_PACK_EMAIL, seed, seedDemo, seedDemoPack } from '../src/seed.js';
+import { DEMO_FREE_TRACK_EMAIL, DEMO_PASSWORD, DEMO_PACK_EMAIL, seed, seedDemo, seedDemoFreeTrack, seedDemoPack } from '../src/seed.js';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -892,5 +892,22 @@ describe('coach IA', () => {
     assert.equal(over.status, 429);
     const empty = await api('/api/coach/chat', { method: 'POST', token, body: { messages: [] } });
     assert.equal(empty.status, 400);
+  });
+});
+
+describe('démo filière libre', () => {
+  test('compte démo avec pack Filière libre, carnet de bord et parcours', async () => {
+    assert.equal(await seedDemoFreeTrack(db), true);
+    assert.equal(await seedDemoFreeTrack(db), false);
+    const token = (await api('/api/auth/login', { method: 'POST', body: { email: DEMO_FREE_TRACK_EMAIL, password: DEMO_PASSWORD } })).data.token;
+    const me = await api('/api/free-track/me', { token });
+    assert.equal(me.data.region, 'wallonie');
+    assert.ok(me.data.totals.km > 600);
+    assert.equal(me.data.allRoutes, true);
+    for (const id of ['theory', 'provisional', 'guide', 'duration']) assert.equal(me.data.steps.find((s) => s.id === id).done, true, id);
+    assert.equal(me.data.nextStep.id, 'roadbook');
+    const pack = await api('/api/subscriptions/me', { token });
+    assert.equal(pack.data.subscription.plan.id, 'libre');
+    assert.equal(pack.data.journey.freeTrack, true);
   });
 });
