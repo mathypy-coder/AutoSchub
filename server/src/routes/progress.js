@@ -3,6 +3,7 @@ import { requireAuth } from '../auth.js';
 import { PERMIT_CODES } from '../data/permits.js';
 import { SKILL_LEVELS } from '../data/skills.js';
 import { HttpError } from '../errors.js';
+import { localizeSkill, localizeSkillLevels } from '../i18n.js';
 import { latestSkillLevels, skillsForCategory, skillsSummary } from '../progress.js';
 
 export function progressRoutes(db) {
@@ -23,10 +24,10 @@ export function progressRoutes(db) {
     const current = await latestSkillLevels(db, studentId, category);
     res.json({
       category,
-      levels: SKILL_LEVELS,
+      levels: localizeSkillLevels(SKILL_LEVELS, req.lang),
       summary: await skillsSummary(db, studentId, category),
       skills: skillsForCategory(category).map((s) => ({
-        ...s,
+        ...localizeSkill(s, req.lang),
         level: current[s.id]?.level ?? 0,
         updatedAt: current[s.id]?.updatedAt ?? null,
       })),

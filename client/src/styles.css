@@ -1208,3 +1208,194 @@ textarea:focus {
   width: auto;
   padding: 0.35rem 0.4rem;
 }
+
+/* ——— Sélecteur de langue ——— */
+.lang-switch {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+}
+.lang-btn {
+  min-width: 40px;
+  min-height: 32px;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.lang-btn-active {
+  background: var(--brand);
+  color: var(--bg);
+}
+.lang-switch-top {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+
+/* ——— Filière libre ——— */
+.rule-list {
+  margin: 0 0 12px;
+  padding-left: 20px;
+  display: grid;
+  gap: 6px;
+}
+.rule-region summary {
+  cursor: pointer;
+  list-style: none;
+}
+.rule-region summary::after {
+  content: ' ▾';
+  color: var(--muted);
+}
+.table-scroll {
+  overflow-x: auto;
+  margin-bottom: 12px;
+}
+.compare {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.compare th,
+.compare td {
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+.compare thead th.active {
+  color: var(--accent);
+}
+.route-card {
+  cursor: pointer;
+}
+.route-active {
+  outline: 2px solid var(--info);
+}
+.route-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  vertical-align: -1px;
+}
+.locked {
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--surface);
+}
+.pack-promo {
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+}
+.roadbook {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.roadbook-entry {
+  gap: 4px;
+}
+
+/* ——— Coach IA ——— */
+.coach-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 12px 0;
+}
+.coach-msg {
+  max-width: 88%;
+  padding: 10px 14px;
+  border-radius: 16px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.coach-msg p,
+.coach-msg ul {
+  margin: 0 0 8px;
+}
+.coach-msg p:last-child,
+.coach-msg ul:last-child {
+  margin-bottom: 0;
+}
+.coach-msg ul {
+  padding-left: 18px;
+}
+.coach-user {
+  align-self: flex-end;
+  background: var(--brand);
+  color: var(--bg);
+  border-bottom-right-radius: 4px;
+}
+.coach-assistant {
+  align-self: flex-start;
+  background: var(--surface);
+  border-bottom-left-radius: 4px;
+}
+.coach-typing {
+  color: var(--muted);
+  font-style: italic;
+}
+.coach-input {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  position: sticky;
+  bottom: calc(var(--nav-height) + 8px);
+  padding: 8px 0;
+  background: var(--bg);
+}
+.coach-input textarea {
+  flex: 1;
+  resize: none;
+  font: inherit;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  color: var(--text);
+}
+.plan-days {
+  list-style: none;
+  margin: 12px 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.plan-days ul {
+  margin: 6px 0 0;
+  padding-left: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+}
+
+@media print {
+  .bottom-nav,
+  .no-print,
+  .chips,
+  .lang-switch {
+    display: none !important;
+  }
+  .card {
+    break-inside: avoid;
+    box-shadow: none;
+    border: 1px solid #ccc;
+  }
+}
+.plan-days .link-button {
+  text-align: left;
+  padding: 0;
+}

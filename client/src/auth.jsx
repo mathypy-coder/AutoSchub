@@ -1,18 +1,21 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { api, getToken, setToken } from './api.js';
+import { useT } from './i18n.jsx';
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(Boolean(getToken()));
+  const t = useT();
+  // Clé de traduction du message affiché (traduit au rendu, suit la langue choisie).
   const [notice, setNotice] = useState('');
 
   useEffect(() => {
     const expire = () => {
       setToken(null);
       setUser(null);
-      setNotice('Ta session a expiré. Reconnecte-toi pour continuer.');
+      setNotice('auth.sessionExpired');
     };
     window.addEventListener('autoschub:session-expired', expire);
     return () => window.removeEventListener('autoschub:session-expired', expire);
@@ -58,7 +61,7 @@ export function AuthProvider({ children }) {
   const value = {
     user,
     loading,
-    notice,
+    notice: notice ? t(notice) : '',
     login: (email, password) => authenticate('/auth/login', { email, password }),
     register: (payload) => authenticate('/auth/register', payload),
     logout: () => {

@@ -1,7 +1,8 @@
 import { useEffect } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { MapContainer, Marker, Popup, TileLayer, Tooltip, useMap, useMapEvents } from 'react-leaflet';
+import { useT } from '../i18n.jsx';
+import { MapContainer, Marker, Polyline, Popup, TileLayer, Tooltip, useMap, useMapEvents } from 'react-leaflet';
 
 const icon = (className, label = '') =>
   L.divIcon({ className: '', html: `<div class="pin ${className}">${label}</div>`, iconSize: [34, 34], iconAnchor: [17, 17] });
@@ -32,12 +33,14 @@ function ClickHandler({ onClick }) {
  * Carte des moniteurs façon Uber.
  * markers : [{ id, lat, lng, online, label }]
  * examCenters : centres d'examen [{ id, lat, lng, name, address, directionsUrl }]
+ * paths : tracés indicatifs [{ id, points: [{ lat, lng }], color, active }] (parcours d'entraînement)
  */
 export default function MapView({
   center,
   me,
   markers = [],
   examCenters = [],
+  paths = [],
   selectedCenterId,
   onSelectCenter,
   selectedId,
@@ -46,6 +49,7 @@ export default function MapView({
   zoom = 12,
   height = '42vh',
 }) {
+  const t = useT();
   return (
     <div className="map-wrap" style={{ height }}>
       <MapContainer center={[center.lat, center.lng]} zoom={zoom} scrollWheelZoom className="map">
@@ -55,9 +59,16 @@ export default function MapView({
         />
         <Recenter center={center} />
         <ClickHandler onClick={onMapClick} />
+        {paths.map((p) => (
+          <Polyline
+            key={`path-${p.id}`}
+            positions={p.points.map((pt) => [pt.lat, pt.lng])}
+            pathOptions={{ color: p.color ?? '#2563eb', weight: p.active ? 5 : 3, opacity: p.active ? 0.9 : 0.45, dashArray: p.active ? null : '6 6' }}
+          />
+        ))}
         {me && (
           <Marker position={[me.lat, me.lng]} icon={ICONS.me}>
-            <Tooltip>Point de prise en charge</Tooltip>
+            <Tooltip>{t('map.pickup')}</Tooltip>
           </Marker>
         )}
         {examCenters.map((c) => (
@@ -68,12 +79,12 @@ export default function MapView({
             eventHandlers={{ click: () => onSelectCenter?.(c.id) }}
           >
             <Popup>
-              <strong>Centre d’examen {c.name}</strong>
+              <strong>{t('map.examCenter', { name: c.name })}</strong>
               <br />
               {c.address}
               <br />
               <a href={c.directionsUrl} target="_blank" rel="noreferrer">
-                Itinéraire →
+                {t('map.directions')}
               </a>
             </Popup>
           </Marker>

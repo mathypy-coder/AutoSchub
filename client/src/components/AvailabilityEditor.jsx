@@ -1,16 +1,10 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { ErrorMessage } from './ui.jsx';
+import { useT } from '../i18n.jsx';
 
-const DAYS = [
-  { weekday: 1, label: 'Lundi' },
-  { weekday: 2, label: 'Mardi' },
-  { weekday: 3, label: 'Mercredi' },
-  { weekday: 4, label: 'Jeudi' },
-  { weekday: 5, label: 'Vendredi' },
-  { weekday: 6, label: 'Samedi' },
-  { weekday: 0, label: 'Dimanche' },
-];
+// Ordre d'affichage (lundi → dimanche) ; libellé : t(`availability.day${weekday}`).
+const DAYS = [1, 2, 3, 4, 5, 6, 0];
 
 const toTime = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 const toMinutes = (t) => {
@@ -20,6 +14,7 @@ const toMinutes = (t) => {
 
 // Plages de travail hebdomadaires du moniteur (heure de Bruxelles) : les élèves ne voient que ces créneaux.
 export default function AvailabilityEditor() {
+  const t = useT();
   const [week, setWeek] = useState(null);
   const [isDefault, setIsDefault] = useState(false);
   const [error, setError] = useState('');
@@ -59,7 +54,7 @@ export default function AvailabilityEditor() {
         },
       });
       setIsDefault(false);
-      setMessage('Disponibilités enregistrées ✔');
+      setMessage(t('availability.saved'));
     } catch (err) {
       setError(err.message);
     }
@@ -67,44 +62,47 @@ export default function AvailabilityEditor() {
 
   return (
     <div className="card">
-      <strong>Mes disponibilités</strong>
+      <strong>{t('availability.title')}</strong>
       <p className="muted small">
-        Les élèves réservent uniquement dans ces plages (heure belge).
-        {isDefault && ' Plages par défaut : du lundi au samedi, 8 h – 19 h.'}
+        {t('availability.intro')}
+        {isDefault && t('availability.defaultNote')}
       </p>
-      {DAYS.map(({ weekday, label }) => (
-        <div key={weekday} className="avail-row">
-          <label className="switch">
-            <input type="checkbox" checked={Boolean(week[weekday])} onChange={() => toggle(weekday)} />
-            {label}
-          </label>
-          {week[weekday] ? (
-            <span className="row">
-              <input
-                type="time"
-                step={1800}
-                value={week[weekday].start}
-                aria-label={`${label} début`}
-                onChange={(e) => setWeek({ ...week, [weekday]: { ...week[weekday], start: e.target.value } })}
-              />
-              <span>–</span>
-              <input
-                type="time"
-                step={1800}
-                value={week[weekday].end}
-                aria-label={`${label} fin`}
-                onChange={(e) => setWeek({ ...week, [weekday]: { ...week[weekday], end: e.target.value } })}
-              />
-            </span>
-          ) : (
-            <span className="muted small">Repos</span>
-          )}
-        </div>
-      ))}
+      {DAYS.map((weekday) => {
+        const label = t(`availability.day${weekday}`);
+        return (
+          <div key={weekday} className="avail-row">
+            <label className="switch">
+              <input type="checkbox" checked={Boolean(week[weekday])} onChange={() => toggle(weekday)} />
+              {label}
+            </label>
+            {week[weekday] ? (
+              <span className="row">
+                <input
+                  type="time"
+                  step={1800}
+                  value={week[weekday].start}
+                  aria-label={t('availability.start', { day: label })}
+                  onChange={(e) => setWeek({ ...week, [weekday]: { ...week[weekday], start: e.target.value } })}
+                />
+                <span>–</span>
+                <input
+                  type="time"
+                  step={1800}
+                  value={week[weekday].end}
+                  aria-label={t('availability.end', { day: label })}
+                  onChange={(e) => setWeek({ ...week, [weekday]: { ...week[weekday], end: e.target.value } })}
+                />
+              </span>
+            ) : (
+              <span className="muted small">{t('availability.off')}</span>
+            )}
+          </div>
+        );
+      })}
       <ErrorMessage error={error} />
       {message && <p className="success">{message}</p>}
       <button type="button" className="btn btn-primary" onClick={save}>
-        Enregistrer mes disponibilités
+        {t('availability.save')}
       </button>
     </div>
   );

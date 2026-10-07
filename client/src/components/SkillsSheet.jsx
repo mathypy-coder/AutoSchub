@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api.js';
 import { ErrorMessage } from './ui.jsx';
+import { translate, useT } from '../i18n.jsx';
 
-export const LEVEL_LABELS = ['Non abordé', 'Abordé', 'En progrès', 'Maîtrisé'];
+// Niveaux 0 à 3 ; libellé traduit à la demande (la langue peut changer).
+export const LEVELS = [0, 1, 2, 3];
+export const levelLabel = (level) => translate(`skills.level${level}`);
 
 // Regroupe les compétences par thème (« Manœuvres », « Circulation »…).
 export function groupSkills(skills) {
@@ -12,8 +15,9 @@ export function groupSkills(skills) {
 }
 
 export function LevelBar({ level }) {
+  const t = useT();
   return (
-    <span className="level-bar" aria-label={LEVEL_LABELS[level]}>
+    <span className="level-bar" aria-label={t(`skills.level${level}`)}>
       {[1, 2, 3].map((n) => (
         <span key={n} className={n <= level ? `on level-${level}` : ''} />
       ))}
@@ -23,6 +27,7 @@ export function LevelBar({ level }) {
 
 // Fiche de suivi d'une leçon : le moniteur note chaque compétence (0 à 3), l'élève consulte.
 export default function SkillsSheet({ bookingId, editable }) {
+  const t = useT();
   const [data, setData] = useState(null);
   const [levels, setLevels] = useState({});
   const [error, setError] = useState('');
@@ -54,7 +59,7 @@ export default function SkillsSheet({ bookingId, editable }) {
     }
   };
 
-  if (!data) return <div className="skills-sheet">{error ? <ErrorMessage error={error} /> : <p className="muted small">Chargement…</p>}</div>;
+  if (!data) return <div className="skills-sheet">{error ? <ErrorMessage error={error} /> : <p className="muted small">{t('common.loading')}</p>}</div>;
 
   return (
     <div className="skills-sheet">
@@ -66,13 +71,13 @@ export default function SkillsSheet({ bookingId, editable }) {
               <span className="small grow">{s.label}</span>
               {editable ? (
                 <div className="level-picker" role="radiogroup" aria-label={s.label}>
-                  {LEVEL_LABELS.map((label, level) => (
+                  {LEVELS.map((level) => (
                     <button
-                      key={label}
+                      key={level}
                       type="button"
                       role="radio"
                       aria-checked={levels[s.id] === level}
-                      title={label}
+                      title={t(`skills.level${level}`)}
                       className={levels[s.id] === level ? `on level-${level}` : ''}
                       onClick={() => {
                         setSaved(false);
@@ -92,14 +97,14 @@ export default function SkillsSheet({ bookingId, editable }) {
       ))}
       {editable ? (
         <>
-          <p className="muted small">0 non abordé · 1 abordé · 2 en progrès · 3 maîtrisé</p>
+          <p className="muted small">{t('skills.legend')}</p>
           <button type="button" className="btn btn-primary" disabled={busy} onClick={save}>
-            {busy ? 'Enregistrement…' : 'Enregistrer la fiche'}
+            {busy ? t('skills.saving') : t('skills.save')}
           </button>
-          {saved && <span className="success small"> Fiche enregistrée ✔</span>}
+          {saved && <span className="success small"> {t('skills.saved')}</span>}
         </>
       ) : (
-        <p className="muted small">Niveau actuel pour chaque compétence, d’après les fiches de tes moniteurs.</p>
+        <p className="muted small">{t('skills.readonlyNote')}</p>
       )}
       <ErrorMessage error={error} />
     </div>

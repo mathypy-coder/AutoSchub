@@ -1,47 +1,53 @@
 import { Link } from 'react-router-dom';
+import { LanguageSwitcher, useT } from '../i18n.jsx';
 
+// Les textes sont traduits au rendu : on ne garde ici que les icônes et les clés.
 const FEATURES = [
-  { icon: '📍', title: 'Ton moniteur en 2 clics', text: 'Vois les moniteurs autour de toi sur la carte et réserve maintenant ou plus tard.' },
-  { icon: '🏍️', title: 'Tous les permis', text: 'AM, A1, A2, A, B, BE, C, CE, D, DE, G : voiture, moto, camion, bus et tracteur.' },
-  { icon: '📝', title: 'Théorie incluse', text: 'Examens blancs au barème belge (41/50, faute grave = 5 points).' },
-  { icon: '🎟️', title: 'Des packs qui te suivent', text: 'Abonnement mensuel avec heures incluses et suivi de chaque étape, de la théorie au permis.' },
-  { icon: '⭐', title: 'Moniteurs notés', text: 'Moniteurs agréés, notés par les élèves après chaque leçon.' },
+  { icon: '📍', key: 'f1' },
+  { icon: '🏍️', key: 'f2' },
+  { icon: '📝', key: 'f3' },
+  { icon: '🎟️', key: 'f4' },
+  { icon: '⭐', key: 'f5' },
+  { icon: '🧭', key: 'f6' },
+  { icon: '🤖', key: 'f7' },
 ];
 
 export default function Welcome() {
+  const t = useT();
   return (
     <div className="welcome">
       <header className="welcome-hero">
+        <LanguageSwitcher />
         <div className="logo">
           Auto<span>Schub</span>
         </div>
-        <h1>Le Uber de l’auto-école en Belgique.</h1>
-        <p>Réserve ton moniteur comme une course. Révise ta théorie dans la même app.</p>
+        <h1>{t('welcome.tagline')}</h1>
+        <p>{t('welcome.intro')}</p>
         <div className="welcome-actions">
           <Link className="btn btn-primary" to="/inscription">
-            Créer un compte
+            {t('welcome.createAccount')}
           </Link>
           <Link className="btn btn-ghost-light" to="/connexion">
-            J’ai déjà un compte
+            {t('welcome.haveAccount')}
           </Link>
         </div>
       </header>
 
       <section className="welcome-features">
         {FEATURES.map((f) => (
-          <article key={f.title} className="feature">
+          <article key={f.key} className="feature">
             <span className="feature-icon" aria-hidden="true">
               {f.icon}
             </span>
             <div>
-              <h3>{f.title}</h3>
-              <p>{f.text}</p>
+              <h3>{t(`welcome.${f.key}_title`)}</h3>
+              <p>{t(`welcome.${f.key}_text`)}</p>
             </div>
           </article>
         ))}
         <Link className="card card-link" to="/inscription?role=instructor">
-          <strong>Tu es moniteur agréé ?</strong>
-          <span className="muted">Passe en ligne quand tu veux et reçois des demandes de leçons près de toi →</span>
+          <strong>{t('welcome.instructorTitle')}</strong>
+          <span className="muted">{t('welcome.instructorText')}</span>
         </Link>
       </section>
     </div>

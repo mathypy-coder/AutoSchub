@@ -4,19 +4,22 @@ import { CITIES } from '../../cities.js';
 import { Chips, ErrorMessage, MultiChips } from '../../components/ui.jsx';
 import { useAuth } from '../../auth.jsx';
 import AvailabilityEditor from '../../components/AvailabilityEditor.jsx';
+import { LanguageSwitcher, useT } from '../../i18n.jsx';
 
 const LANGUAGE_OPTIONS = Object.entries(LANGUAGE_LABELS).map(([value, label]) => ({ value, label }));
+// Valeurs envoyées au serveur ; libellés traduits au rendu.
 const TRANSMISSIONS = [
-  { value: 'manuelle', label: 'Manuelle' },
-  { value: 'automatique', label: 'Automatique' },
-  { value: 'les deux', label: 'Les deux' },
+  { value: 'manuelle', key: 'transmission_manual' },
+  { value: 'automatique', key: 'transmission_automatic' },
+  { value: 'les deux', key: 'transmission_both' },
 ];
 
 export default function InstructorProfile() {
+  const t = useT();
   const { user, logout } = useAuth();
   const [form, setForm] = useState(null);
   const [permits, setPermits] = useState([]);
-  const [message, setMessage] = useState('');
+  const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -26,14 +29,14 @@ export default function InstructorProfile() {
       .catch((err) => setError(err.message));
   }, []);
 
-  if (!form) return <div className="page">{error ? <ErrorMessage error={error} /> : 'Chargement…'}</div>;
+  if (!form) return <div className="page">{error ? <ErrorMessage error={error} /> : t('common.loading')}</div>;
 
   const field = (name) => ({ value: form[name] ?? '', onChange: (e) => setForm({ ...form, [name]: e.target.value }) });
 
   const save = async (e) => {
     e.preventDefault();
     setError('');
-    setMessage('');
+    setSaved(false);
     try {
       const { instructor } = await api('/instructors/me/profile', {
         method: 'PATCH',
@@ -50,7 +53,7 @@ export default function InstructorProfile() {
         },
       });
       setForm(instructor);
-      setMessage('Profil enregistré ✔');
+      setSaved(true);
     } catch (err) {
       setError(err.message);
     }
@@ -58,27 +61,31 @@ export default function InstructorProfile() {
 
   return (
     <div className="page">
-      <h1>Mon profil moniteur</h1>
+      <h1>{t('instructorProfile.title')}</h1>
       <p className="muted">
-        {user.firstName} {user.lastName} · {user.email} · agrément {form.approvalNumber}
+        {user.firstName} {user.lastName} · {user.email} · {t('instructorProfile.approval', { number: form.approvalNumber })}
       </p>
       <form className="form" onSubmit={save}>
-        <div className="label">Catégories enseignées</div>
+        <div className="label">{t('instructorProfile.categories')}</div>
         <MultiChips
           options={permits.map((p) => ({ value: p.code, label: p.code }))}
           values={form.categories}
           onChange={(categories) => setForm({ ...form, categories })}
         />
-        <div className="label">Langues</div>
+        <div className="label">{t('instructorProfile.languagesSpoken')}</div>
         <MultiChips
           options={LANGUAGE_OPTIONS}
           values={form.languages}
           onChange={(languages) => setForm({ ...form, languages })}
         />
-        <div className="label">Boîte de vitesses</div>
-        <Chips options={TRANSMISSIONS} value={form.transmission} onChange={(transmission) => setForm({ ...form, transmission })} />
+        <div className="label">{t('instructorProfile.gearbox')}</div>
+        <Chips
+          options={TRANSMISSIONS.map((o) => ({ value: o.value, label: t(`instructorProfile.${o.key}`) }))}
+          value={form.transmission}
+          onChange={(transmission) => setForm({ ...form, transmission })}
+        />
         <label>
-          Zone de travail
+          {t('instructorProfile.workArea')}
           <select
             value=""
             onChange={(e) => {
@@ -86,35 +93,42 @@ export default function InstructorProfile() {
               if (city) setForm({ ...form, lat: city.lat, lng: city.lng });
             }}
           >
-            <option value="">Position actuelle ({form.lat?.toFixed(3)}, {form.lng?.toFixed(3)}) — changer…</option>
+            <option value="">
+              {t('instructorProfile.currentPosition', { lat: form.lat?.toFixed(3), lng: form.lng?.toFixed(3) })}
+            </option>
             {CITIES.map((c) => (
               <option key={c.name}>{c.name}</option>
             ))}
           </select>
         </label>
         <label>
-          Auto-école
+          {t('instructorProfile.school')}
           <input {...field('schoolName')} />
         </label>
         <label>
-          Véhicule(s)
+          {t('instructorProfile.vehicles')}
           <input {...field('vehicle')} />
         </label>
         <label>
-          Tarif horaire (€)
+          {t('instructorProfile.hourlyRate')}
           <input type="number" min={20} max={250} {...field('hourlyRate')} />
         </label>
         <label>
-          Présentation
+          {t('instructorProfile.bio')}
           <textarea rows={4} {...field('bio')} />
         </label>
         <ErrorMessage error={error} />
-        {message && <p className="success">{message}</p>}
-        <button className="btn btn-primary">Enregistrer</button>
+        {saved && <p className="success">{t('instructorProfile.saved')}</p>}
+        <button className="btn btn-primary">{t('common.save')}</button>
       </form>
       <AvailabilityEditor />
+      <section className="card">
+        <h2 className="section-title">{t('instructorProfile.appLanguage')}</h2>
+        <p className="muted small">{t('instructorProfile.appLanguageHint')}</p>
+        <LanguageSwitcher />
+      </section>
       <button type="button" className="btn btn-danger btn-block logout" onClick={logout}>
-        Se déconnecter
+        {t('instructorProfile.logout')}
       </button>
     </div>
   );

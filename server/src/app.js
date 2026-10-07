@@ -4,11 +4,15 @@ import { fileURLToPath } from 'node:url';
 import { authMiddleware, SECRET_SOURCE } from './auth.js';
 import { PERMITS, PERMIT_GROUPS } from './data/permits.js';
 import { errorHandler } from './errors.js';
+import { langMiddleware, localizePermit, localizePermitGroup } from './i18n.js';
 import { authRoutes } from './routes/auth.js';
 import { bookingRoutes } from './routes/bookings.js';
+import { coachRoutes } from './routes/coach.js';
 import { examCenterRoutes } from './routes/examCenters.js';
+import { freeTrackRoutes } from './routes/freeTrack.js';
 import { progressRoutes } from './routes/progress.js';
 import { demoEnabled } from './seed.js';
+import { aiEnabled } from './coach.js';
 import { instructorRoutes } from './routes/instructors.js';
 import { subscriptionRoutes } from './routes/subscriptions.js';
 import { theoryRoutes } from './routes/theory.js';
@@ -29,6 +33,7 @@ export function createApp(db) {
   // Sur Vercel, l'adresse du client arrive par X-Forwarded-For (posé par la plateforme) : utile
   // pour limiter les tentatives de connexion. Ailleurs, l'en-tête pourrait être falsifié.
   if (process.env.VERCEL || process.env.TRUST_PROXY === '1') app.set('trust proxy', true);
+  app.use(langMiddleware);
   app.use(express.json({ limit: '100kb' }));
 
   // Diagnostic de configuration (sans révéler de secret).
@@ -49,10 +54,17 @@ export function createApp(db) {
       // Sur Vercel sans base Turso, chaque instance a sa propre base temporaire :
       // les comptes créés peuvent disparaître. L'app l'indique clairement.
       persistent: db.isRemote || !process.env.VERCEL,
+      // Coach IA : réponses de Claude si ANTHROPIC_API_KEY est configurée, sinon coach hors ligne.
+      coachAi: aiEnabled(),
     });
   });
-  app.get('/api/permits', cachePublic, (_req, res) => res.json({ groups: PERMIT_GROUPS, permits: PERMITS }));
-  app.get(['/api/exam-centers', '/api/subscriptions/plans', '/api/theory/categories'], cachePublic);
+  app.get('/api/permits', cachePublic, (req, res) =>
+    res.json({
+      groups: PERMIT_GROUPS.map((g) => localizePermitGroup(g, req.lang)),
+      permits: PERMITS.map((p) => localizePermit(p, req.lang)),
+    }),
+  );
+  app.get(['/api/exam-centers', '/api/subscriptions/plans', '/api/theory/categories', '/api/free-track/rules'], cachePublic);
 
   app.use(authMiddleware(db));
   app.use('/api/auth', authRoutes(db));
@@ -62,6 +74,8 @@ export function createApp(db) {
   app.use('/api/subscriptions', subscriptionRoutes(db));
   app.use('/api/exam-centers', examCenterRoutes());
   app.use('/api/progress', progressRoutes(db));
+  app.use('/api/free-track', freeTrackRoutes(db));
+  app.use('/api/coach', coachRoutes(db));
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Route inconnue.' }));
 
   // En production, le serveur sert aussi l'application web compilée.

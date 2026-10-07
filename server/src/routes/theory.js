@@ -5,6 +5,7 @@ import { EXAM_RULES, THEORY_CATEGORIES } from '../data/permits.js';
 import { QUESTIONS } from '../data/questions.js';
 import { FREE_EXAMS_PER_WEEK } from '../data/plans.js';
 import { HttpError } from '../errors.js';
+import { localizeQuestion, localizeTheme, tr } from '../i18n.js';
 import { hasActiveSubscription } from '../subscriptions.js';
 
 const QUESTIONS_BY_ID = new Map(QUESTIONS.map((q) => [q.id, q]));
@@ -48,6 +49,7 @@ export function gradeAnswers(questions, answers) {
       correct: isCorrect,
       grave: q.grave,
       theme: q.theme,
+      themeLabel: q.themeLabel ?? q.theme,
       explanation: q.explanation,
     };
   });
@@ -135,15 +137,64 @@ export function readinessScore(recentExams, themeStats, allThemes) {
   return Math.round(100 * (0.7 * examAvg + 0.3 * themeShare));
 }
 
+
+// Préparation à l'examen théorique d'un élève (utilisé aussi par le coach IA).
+export async function theoryInsights(db, userId, category, lang = 'fr') {
+  const allThemes = [...new Set(forCategory(category).map((q) => q.theme))];
+  const themeStats = await db.all(
+    'SELECT theme, answered, correct FROM theory_theme_stats WHERE user_id = ? AND category = ?',
+    userId,
+    category,
+  );
+  const recentExams = await db.all(
+    `SELECT score, max_score FROM theory_attempts WHERE user_id = ? AND category = ? AND mode = 'exam'
+       ORDER BY id DESC LIMIT 3`,
+    userId,
+    category,
+  );
+  const { n: toReview } = await db.get(
+    'SELECT COUNT(*) AS n FROM theory_mistakes WHERE user_id = ? AND category = ?',
+    userId,
+    category,
+  );
+  const byTheme = new Map(themeStats.map((t) => [t.theme, t]));
+  const readiness = readinessScore(recentExams, themeStats, allThemes);
+  return {
+    category,
+    readiness,
+    ready: readiness >= 85 && recentExams.length >= 2,
+    examsTaken: recentExams.length,
+    toReview,
+    themes: allThemes
+      .map((theme) => {
+        const t = byTheme.get(theme);
+        return {
+          theme,
+          themeLabel: localizeTheme(theme, lang),
+          answered: t?.answered ?? 0,
+          rate: t?.answered ? Math.round((t.correct / t.answered) * 100) : null,
+        };
+      })
+      .sort((a, b) => (a.rate ?? -1) - (b.rate ?? -1)),
+  };
+}
+
 export function theoryRoutes(db) {
   const router = Router();
 
-  router.get('/categories', (_req, res) => {
+  router.get('/categories', (req, res) => {
     res.json({
       rules: EXAM_RULES,
       categories: THEORY_CATEGORIES.map((c) => {
         const questions = forCategory(c.code);
-        return { ...c, questionCount: questions.length, themes: [...new Set(questions.map((q) => q.theme))] };
+        const themes = [...new Set(questions.map((q) => q.theme))];
+        return {
+          ...c,
+          label: tr(req.lang, 'theoryCategories', c.code, c.label),
+          questionCount: questions.length,
+          themes,
+          themeLabels: Object.fromEntries(themes.map((t) => [t, localizeTheme(t, req.lang)])),
+        };
       }),
     });
   });
@@ -199,9 +250,10 @@ export function theoryRoutes(db) {
       durationMinutes,
       quizToken,
       // En examen, la gravité des questions n'est révélée qu'à la correction.
-      questions: picked.map(({ id, theme: t, question, choices, grave }) => ({
+      questions: picked.map((q) => localizeQuestion(q, req.lang)).map(({ id, theme: t, themeLabel, question, choices, grave }) => ({
         id,
         theme: t,
+        themeLabel,
         question,
         choices,
         ...(mode !== 'exam' ? { grave } : {}),
@@ -213,8 +265,9 @@ export function theoryRoutes(db) {
     const quiz = readToken(req.body?.quizToken, 'quiz');
     if (!quiz) throw new HttpError(400, 'Quiz expiré ou invalide. Relance un nouveau quiz.');
     if (quiz.uid !== (req.user?.id ?? null)) throw new HttpError(403, 'Ce quiz a été délivré à un autre compte.');
-    const questions = quiz.ids.map((id) => QUESTIONS_BY_ID.get(id));
-    if (!questions.length || questions.some((q) => !q)) throw new HttpError(400, 'Questions invalides.');
+    const source = quiz.ids.map((id) => QUESTIONS_BY_ID.get(id));
+    if (!source.length || source.some((q) => !q)) throw new HttpError(400, 'Questions invalides.');
+    const questions = source.map((q) => localizeQuestion(q, req.lang));
     const raw = req.body?.answers;
     const answers = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
 
@@ -253,38 +306,7 @@ export function theoryRoutes(db) {
   router.get('/insights', requireAuth(), async (req, res) => {
     const { category } = req.query;
     if (!THEORY_CODES.includes(category)) throw new HttpError(400, 'Catégorie théorique invalide.');
-    const allThemes = [...new Set(forCategory(category).map((q) => q.theme))];
-    const themeStats = await db.all(
-      'SELECT theme, answered, correct FROM theory_theme_stats WHERE user_id = ? AND category = ?',
-      req.user.id,
-      category,
-    );
-    const recentExams = await db.all(
-      `SELECT score, max_score FROM theory_attempts WHERE user_id = ? AND category = ? AND mode = 'exam'
-         ORDER BY id DESC LIMIT 3`,
-      req.user.id,
-      category,
-    );
-    const { n: toReview } = await db.get(
-      'SELECT COUNT(*) AS n FROM theory_mistakes WHERE user_id = ? AND category = ?',
-      req.user.id,
-      category,
-    );
-    const byTheme = new Map(themeStats.map((t) => [t.theme, t]));
-    const readiness = readinessScore(recentExams, themeStats, allThemes);
-    res.json({
-      category,
-      readiness,
-      ready: readiness >= 85 && recentExams.length >= 2,
-      examsTaken: recentExams.length,
-      toReview,
-      themes: allThemes
-        .map((theme) => {
-          const t = byTheme.get(theme);
-          return { theme, answered: t?.answered ?? 0, rate: t?.answered ? Math.round((t.correct / t.answered) * 100) : null };
-        })
-        .sort((a, b) => (a.rate ?? -1) - (b.rate ?? -1)),
-    });
+    res.json(await theoryInsights(db, req.user.id, category, req.lang));
   });
 
   router.get('/history', requireAuth(), async (req, res) => {
@@ -295,7 +317,7 @@ export function theoryRoutes(db) {
          FROM theory_attempts WHERE user_id = ? ORDER BY id DESC LIMIT 50`,
         req.user.id,
       )
-    ).map((a) => ({ ...a, passed: Boolean(a.passed) }));
+    ).map((a) => ({ ...a, themeLabel: a.theme ? localizeTheme(a.theme, req.lang) : null, passed: Boolean(a.passed) }));
     const { n: examsThisWeek } = await db.get(
       `SELECT COUNT(*) AS n FROM theory_attempts
          WHERE user_id = ? AND mode = 'exam' AND created_at >= datetime('now', '-7 days')`,

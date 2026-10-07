@@ -145,6 +145,43 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 CREATE INDEX IF NOT EXISTS idx_messages_booking ON messages(booking_id, id);
 
+-- Filière libre : profil de l'élève (Région, centre d'examen visé, étapes déclarées, guides).
+CREATE TABLE IF NOT EXISTS free_track (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id),
+  region TEXT,
+  category TEXT NOT NULL DEFAULT 'B',
+  exam_center_id TEXT,
+  provisional_at TEXT,
+  guide_session_at TEXT,
+  exam_date TEXT,
+  license_at TEXT,
+  guides TEXT NOT NULL DEFAULT '[]',
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Carnet de bord (journal des trajets avec le guide).
+CREATE TABLE IF NOT EXISTS roadbook_entries (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  drive_date TEXT NOT NULL,
+  duration_min INTEGER NOT NULL,
+  distance_km REAL NOT NULL,
+  conditions TEXT NOT NULL DEFAULT '[]',
+  route_id TEXT,
+  guide_name TEXT NOT NULL DEFAULT '',
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_roadbook_user ON roadbook_entries(user_id, drive_date);
+
+-- Coach IA : nombre de questions posées par jour (quota).
+CREATE TABLE IF NOT EXISTS coach_usage (
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  day TEXT NOT NULL,
+  count INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (user_id, day)
+);
+
 CREATE TABLE IF NOT EXISTS app_meta (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
@@ -152,7 +189,7 @@ CREATE TABLE IF NOT EXISTS app_meta (
 `;
 
 // À incrémenter à chaque changement de SCHEMA ou d'ADDED_COLUMNS.
-export const SCHEMA_VERSION = '6';
+export const SCHEMA_VERSION = '7';
 
 // Colonnes ajoutées après la première version : migration des bases existantes.
 const ADDED_COLUMNS = {

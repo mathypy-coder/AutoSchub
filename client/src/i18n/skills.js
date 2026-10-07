@@ -1,0 +1,36 @@
+// Fiche de compétences.
+export default {
+  fr: {
+    level0: 'Non abordé',
+    level1: 'Abordé',
+    level2: 'En progrès',
+    level3: 'Maîtrisé',
+    legend: '0 non abordé · 1 abordé · 2 en progrès · 3 maîtrisé',
+    saving: 'Enregistrement…',
+    save: 'Enregistrer la fiche',
+    saved: 'Fiche enregistrée ✔',
+    readonlyNote: 'Niveau actuel pour chaque compétence, d’après les fiches de tes moniteurs.',
+  },
+  nl: {
+    level0: 'Nog niet behandeld',
+    level1: 'Behandeld',
+    level2: 'Gaat vooruit',
+    level3: 'Beheerst',
+    legend: '0 nog niet behandeld · 1 behandeld · 2 gaat vooruit · 3 beheerst',
+    saving: 'Opslaan…',
+    save: 'Kaart opslaan',
+    saved: 'Kaart opgeslagen ✔',
+    readonlyNote: 'Huidig niveau per vaardigheid, volgens de kaarten van je instructeurs.',
+  },
+  en: {
+    level0: 'Not covered',
+    level1: 'Covered',
+    level2: 'Improving',
+    level3: 'Mastered',
+    legend: '0 not covered · 1 covered · 2 improving · 3 mastered',
+    saving: 'Saving…',
+    save: 'Save sheet',
+    saved: 'Sheet saved ✔',
+    readonlyNote: 'Current level for each skill, based on your instructors’ sheets.',
+  },
+};

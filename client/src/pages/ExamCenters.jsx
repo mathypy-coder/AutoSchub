@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
+import { useT } from '../i18n.jsx';
 import MapView from '../components/MapView.jsx';
 import { Chips, ErrorMessage } from '../components/ui.jsx';
 import { usePosition } from '../hooks.js';
@@ -9,6 +10,7 @@ import { usePosition } from '../hooks.js';
 const BELGIUM_CENTER = { lat: 50.64, lng: 4.67 };
 
 export default function ExamCenters() {
+  const t = useT();
   const { user } = useAuth();
   const { position, located } = usePosition();
   const [query, setQuery] = useState('');
@@ -41,19 +43,16 @@ export default function ExamCenters() {
 
   return (
     <div className="page">
-      <h1>Centres d’examen</h1>
-      <p className="muted small">
-        Les {data?.total ?? 32} centres agréés en Belgique pour l’examen théorique et pratique. Depuis 2026, théorie et
-        pratique se passent dans la même Région.
-      </p>
+      <h1>{t('centers.title')}</h1>
+      <p className="muted small">{t('centers.intro', { total: data?.total ?? 32 })}</p>
 
       <input
         type="search"
         className="search"
-        placeholder="Ville, code postal, centre ou opérateur…"
+        placeholder={t('centers.searchPlaceholder')}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        aria-label="Rechercher un centre d’examen"
+        aria-label={t('centers.searchLabel')}
       />
       <div className="row-between centers-filters">
         <Chips
@@ -64,7 +63,7 @@ export default function ExamCenters() {
         />
         <label className="switch">
           <input type="checkbox" checked={nearMe} onChange={(e) => setNearMe(e.target.checked)} />
-          Près de moi
+          {t('centers.nearMe')}
         </label>
       </div>
 
@@ -78,12 +77,12 @@ export default function ExamCenters() {
         onSelectCenter={setSelectedId}
       />
       {nearMe && !located && (
-        <p className="map-hint muted">📍 Position non partagée : distances calculées depuis Bruxelles.</p>
+        <p className="map-hint muted">{t('centers.positionHint')}</p>
       )}
 
       <ErrorMessage error={error} />
-      <p className="muted small">{centers.length} centre(s)</p>
-      {data && !centers.length && <p className="empty">Aucun centre ne correspond à « {query} ».</p>}
+      <p className="muted small">{t('centers.count', { count: centers.length })}</p>
+      {data && !centers.length && <p className="empty">{t('centers.empty', { query })}</p>}
 
       {centers.map((c) => (
         <article
@@ -109,25 +108,27 @@ export default function ExamCenters() {
           </span>
           <div className="row wrap">
             <a className="btn btn-secondary" href={c.directionsUrl} target="_blank" rel="noreferrer">
-              Itinéraire
+              {t('centers.directions')}
             </a>
             {c.operatorWebsite && (
               <a className="btn btn-secondary" href={c.operatorWebsite} target="_blank" rel="noreferrer">
-                Prendre rendez-vous
+                {t('centers.appointment')}
               </a>
             )}
             {user.role === 'student' && (
               <Link className="btn btn-primary" to={`/reserver?lat=${c.lat}&lng=${c.lng}&centre=${encodeURIComponent(c.name)}`}>
-                Leçon près du centre
+                {t('centers.lessonNear')}
+              </Link>
+            )}
+            {user.role === 'student' && (
+              <Link className="btn btn-secondary" to={`/libre?tab=routes&center=${c.id}`}>
+                {t('centers.practiceRoutes')}
               </Link>
             )}
           </div>
         </article>
       ))}
-      <p className="muted small">
-        Adresses relevées en 2026 ; positions sur la carte approximatives. Vérifie les horaires et la prise de rendez-vous
-        auprès de l’opérateur du centre.
-      </p>
+      <p className="muted small">{t('centers.disclaimer')}</p>
     </div>
   );
 }

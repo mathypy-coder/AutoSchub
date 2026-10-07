@@ -4,15 +4,18 @@ import { api, LANGUAGE_LABELS } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { CITIES } from '../cities.js';
 import { Chips, ErrorMessage, MultiChips } from '../components/ui.jsx';
+import { LanguageSwitcher, useT } from '../i18n.jsx';
 
 const LANGUAGE_OPTIONS = Object.entries(LANGUAGE_LABELS).map(([value, label]) => ({ value, label }));
+// Valeurs envoyées au serveur (identifiants) → clé de traduction du libellé.
 const TRANSMISSIONS = [
-  { value: 'manuelle', label: 'Manuelle' },
-  { value: 'automatique', label: 'Automatique' },
-  { value: 'les deux', label: 'Les deux' },
+  { value: 'manuelle', key: 'register.transmission_manuelle' },
+  { value: 'automatique', key: 'register.transmission_automatique' },
+  { value: 'les deux', key: 'register.transmission_both' },
 ];
 
 export default function Register() {
+  const t = useT();
   const { register } = useAuth();
   const [params] = useSearchParams();
   const [role, setRole] = useState(params.get('role') === 'instructor' ? 'instructor' : 'student');
@@ -66,14 +69,17 @@ export default function Register() {
 
   return (
     <div className="page page-narrow">
-      <Link to="/" className="back">
-        ← Retour
-      </Link>
-      <h1>Inscription</h1>
+      <div className="row-between">
+        <Link to="/" className="back">
+          {t('common.back')}
+        </Link>
+        <LanguageSwitcher />
+      </div>
+      <h1>{t('register.title')}</h1>
       <Chips
         options={[
-          { value: 'student', label: '🎓 Je suis élève' },
-          { value: 'instructor', label: '🧑‍🏫 Je suis moniteur' },
+          { value: 'student', label: t('register.roleStudent') },
+          { value: 'instructor', label: t('register.roleInstructor') },
         ]}
         value={role}
         onChange={setRole}
@@ -82,28 +88,28 @@ export default function Register() {
       <form onSubmit={submit} className="form">
         <div className="row">
           <label>
-            Prénom
+            {t('register.firstName')}
             <input {...field('firstName')} required autoComplete="given-name" />
           </label>
           <label>
-            Nom
+            {t('register.lastName')}
             <input {...field('lastName')} required autoComplete="family-name" />
           </label>
         </div>
         <label>
-          E-mail
+          {t('register.email')}
           <input type="email" {...field('email')} required autoComplete="email" />
         </label>
         <label>
-          Mot de passe (8 caractères min.)
+          {t('register.password')}
           <input type="password" {...field('password')} required minLength={8} autoComplete="new-password" />
         </label>
         <label>
-          Téléphone
+          {t('register.phone')}
           <input type="tel" {...field('phone')} placeholder="+32 4xx xx xx xx" autoComplete="tel" />
         </label>
         <label>
-          Ville
+          {t('register.city')}
           <select {...field('city')}>
             {CITIES.map((c) => (
               <option key={c.name}>{c.name}</option>
@@ -113,43 +119,43 @@ export default function Register() {
 
         {role === 'instructor' && (
           <fieldset className="fieldset">
-            <legend>Profil moniteur</legend>
+            <legend>{t('register.instructorProfile')}</legend>
             <label>
-              Numéro d’agrément / brevet de moniteur
-              <input {...instructorField('approvalNumber')} required placeholder="ex. AGR-123456" />
+              {t('register.approvalNumber')}
+              <input {...instructorField('approvalNumber')} required placeholder={t('register.approvalPlaceholder')} />
             </label>
             <label>
-              Auto-école (ou « Indépendant »)
+              {t('register.school')}
               <input {...instructorField('schoolName')} />
             </label>
-            <div className="label">Catégories enseignées</div>
+            <div className="label">{t('register.categories')}</div>
             <MultiChips
               options={permits.map((p) => ({ value: p.code, label: p.code }))}
               values={instructor.categories}
               onChange={(categories) => setInstructor({ ...instructor, categories })}
             />
-            <div className="label">Langues</div>
+            <div className="label">{t('register.languages')}</div>
             <MultiChips
               options={LANGUAGE_OPTIONS}
               values={instructor.languages}
               onChange={(languages) => setInstructor({ ...instructor, languages })}
             />
-            <div className="label">Boîte de vitesses</div>
+            <div className="label">{t('register.transmission')}</div>
             <Chips
-              options={TRANSMISSIONS}
+              options={TRANSMISSIONS.map((o) => ({ value: o.value, label: t(o.key) }))}
               value={instructor.transmission}
               onChange={(transmission) => setInstructor({ ...instructor, transmission })}
             />
             <label>
-              Véhicule(s)
-              <input {...instructorField('vehicle')} placeholder="ex. VW Polo double commande" />
+              {t('register.vehicle')}
+              <input {...instructorField('vehicle')} placeholder={t('register.vehiclePlaceholder')} />
             </label>
             <label>
-              Tarif horaire (€)
+              {t('register.hourlyRate')}
               <input type="number" min={20} max={250} {...instructorField('hourlyRate')} />
             </label>
             <label>
-              Présentation
+              {t('register.bio')}
               <textarea rows={3} {...instructorField('bio')} />
             </label>
           </fieldset>
@@ -157,11 +163,11 @@ export default function Register() {
 
         <ErrorMessage error={error} />
         <button className="btn btn-primary" disabled={busy}>
-          {busy ? 'Création…' : 'Créer mon compte'}
+          {busy ? t('register.submitting') : t('register.submit')}
         </button>
       </form>
       <p className="muted center">
-        Déjà inscrit ? <Link to="/connexion">Connexion</Link>
+        {t('register.alreadyRegistered')} <Link to="/connexion">{t('register.login')}</Link>
       </p>
     </div>
   );

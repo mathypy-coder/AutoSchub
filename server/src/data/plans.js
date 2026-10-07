@@ -16,6 +16,22 @@ export const PLANS = [
     ],
   },
   {
+    id: 'libre',
+    name: 'Filière libre',
+    tagline: 'Théorie + guide : apprends avec un proche, on t’accompagne',
+    priceMonthly: 24.99,
+    includedMinutes: 0,
+    discount: 0.2,
+    freeTrack: true,
+    features: [
+      'Tout le pack Théorie + coach IA illimité',
+      'Guide de la filière libre selon ta Région (M36, délais, guide)',
+      'Parcours d’entraînement autour de ton centre d’examen',
+      'Carnet de bord numérique (km, conditions, guides)',
+      '-20 % sur les leçons de contrôle avec un moniteur',
+    ],
+  },
+  {
     id: 'conduite',
     name: 'Conduite',
     tagline: 'Théorie + pratique, à ton rythme',

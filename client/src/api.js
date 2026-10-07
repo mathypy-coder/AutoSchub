@@ -1,3 +1,5 @@
+import { getLang, getLocale, translate } from './i18n.jsx';
+
 const TOKEN_KEY = 'autoschub.token';
 
 export function getToken() {
@@ -20,9 +22,13 @@ export function setToken(token) {
 // auth: false pour les données publiques, que le CDN peut alors mettre en cache.
 export async function api(path, { method = 'GET', body, auth = true } = {}) {
   const token = auth ? getToken() : null;
-  const res = await fetch(`/api${path}`, {
+  // La langue voyage dans l'URL (clé de cache du CDN) et dans l'en-tête Accept-Language.
+  const lang = getLang();
+  const url = `/api${path}${path.includes('?') ? '&' : '?'}lang=${lang}`;
+  const res = await fetch(url, {
     method,
     headers: {
+      'Accept-Language': lang,
       ...(body ? { 'Content-Type': 'application/json' } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
@@ -35,24 +41,17 @@ export async function api(path, { method = 'GET', body, auth = true } = {}) {
     window.dispatchEvent(new Event('autoschub:session-expired'));
   }
   if (!res.ok) {
-    const error = new Error([data.error || `Erreur ${res.status}`, data.detail].filter(Boolean).join(' — '));
+    const error = new Error([data.error || translate('common.errorStatus', { status: res.status }), data.detail].filter(Boolean).join(' — '));
     error.status = res.status;
     throw error;
   }
   return data;
 }
 
-export const STATUS_LABELS = {
-  pending: 'En attente du moniteur',
-  accepted: 'Confirmée',
-  en_route: 'Moniteur en route',
-  in_progress: 'Leçon en cours',
-  completed: 'Terminée',
-  declined: 'Refusée',
-  cancelled: 'Annulée',
-  expired: 'Expirée (sans réponse)',
-};
+export const STATUS_LIST = ['pending', 'accepted', 'en_route', 'in_progress', 'completed', 'declined', 'cancelled', 'expired'];
+export const statusLabel = (status) => translate(`common.status_${status}`);
 
+// Langues parlées par les moniteurs (nom de chaque langue dans sa propre langue).
 export const LANGUAGE_LABELS = {
   fr: 'Français',
   nl: 'Nederlands',
@@ -64,10 +63,10 @@ export const LANGUAGE_LABELS = {
 };
 
 export const formatPrice = (euros) =>
-  new Intl.NumberFormat('fr-BE', { style: 'currency', currency: 'EUR' }).format(euros);
+  new Intl.NumberFormat(getLocale(), { style: 'currency', currency: 'EUR' }).format(euros);
 
 export const formatDateTime = (iso) =>
-  new Intl.DateTimeFormat('fr-BE', {
+  new Intl.DateTimeFormat(getLocale(), {
     weekday: 'short',
     day: 'numeric',
     month: 'short',

@@ -29,6 +29,22 @@ avec un module de **théorie** intégré.
 - **Agenda** : ajout d’une leçon au calendrier du téléphone (.ics avec rappel 1 h avant) ; « Réserver à nouveau ».
 - **Théorie adaptative** : les questions ratées reviennent en révision jusqu’à deux bonnes réponses d’affilée,
   réussite par thème et score de préparation (objectif 85 %).
+- **Trois langues** : français, néerlandais et anglais (sélecteur FR · NL · EN sur l’accueil, la connexion et le profil,
+  détection de la langue du téléphone). Interface, questions de théorie, permis, packs, compétences, parcours et
+  messages d’erreur du serveur sont traduits (`client/src/i18n/*.js`, `server/src/data/i18n/{nl,en}.js`).
+- **Filière libre** (permis B avec un guide, permis provisoire M36) : guide par Région (Wallonie, Bruxelles, Flandre :
+  délais minimums, formation du guide, carnet de bord, interdiction de nuit en Flandre, sources officielles),
+  parcours personnalisé (théorie → M36 → séance avec le guide → km → délai → parcours d’examen → leçon de contrôle →
+  examen → permis), **3 boucles d’entraînement autour de chacun des 32 centres d’examen** (ville, routes régionales,
+  voie rapide, avec points d’attention et ouverture dans Google Maps) et **carnet de bord** numérique (km, durée,
+  conditions, guide ; export CSV et impression PDF). Nouveau **pack Filière libre** (24,99 €/mois : théorie, coach IA,
+  tous les parcours, -20 % sur les leçons de contrôle). Sans ce pack (ou Intégral), seule la boucle urbaine est visible.
+  Les boucles sont des parcours d’entraînement, pas les parcours officiels (non publiés).
+- **Coach IA** pour l’examen théorique : questions libres sur le code de la route, explication personnalisée d’une
+  erreur (« Pourquoi ? » dans la correction), plan de révision sur 7 jours d’après la progression. Réponses rédigées
+  par Claude (`claude-opus-5-5`, avec repli automatique côté serveur) et appuyées sur la banque de questions ;
+  sans clé API, un coach hors ligne répond à partir des explications de la banque. Quota : 10 questions/jour sans
+  pack, 60 avec un pack.
 - **Théorie** : entraînement par thème et examens blancs au barème belge (réussite à 41/50, faute grave = 5 points),
   correction détaillée et historique.
 
@@ -71,7 +87,8 @@ et `moniteur@autoschub.be`
 Variables d’environnement : `PORT` (3001), `DB_FILE` (`data/autoschub.db`, base locale),
 `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN` (base hébergée, prioritaire sur `DB_FILE`), `AUTH_SECRET`
 (aléatoire par défaut — les sessions sont alors perdues au redémarrage), `SEED=0` / `SEED=1` pour désactiver / forcer la démo,
-`DEMO_PACK=0` pour ne pas créer l’élève avec pack, `TRUST_PROXY=1` derrière un proxy de confiance (adresse IP du client,
+`DEMO_PACK=0` pour ne pas créer l’élève avec pack, `ANTHROPIC_API_KEY` (active le coach IA ; `COACH_MODEL` pour
+changer de modèle, `COACH_AI=0` pour forcer le coach hors ligne), `TRUST_PROXY=1` derrière un proxy de confiance (adresse IP du client,
 utilisée pour limiter les tentatives de connexion ; automatique sur Vercel).
 
 Les comptes de démo ont un mot de passe public : ils sont créés par défaut **en local uniquement**. En production
@@ -145,6 +162,11 @@ Couvre l’inscription/connexion, la recherche géographique, tout le cycle d’
 | GET/POST | `/api/bookings/:id/skills`, `/api/bookings/:id/messages` · GET `/api/progress/skills` | élève / moniteur |
 | GET | `/api/theory/insights`, `/api/theory/quiz?mode=review` | élève |
 | GET | `/api/theory/categories`, `/api/theory/quiz`, POST `/api/theory/submit`, GET `/api/theory/history` | — |
+| GET | `/api/free-track/rules`, `/api/free-track/routes/:centerId` | — |
+| GET/PUT | `/api/free-track/me` · GET/POST `/api/free-track/roadbook` · DELETE `/api/free-track/roadbook/:id` | élève |
+| GET | `/api/coach/status`, `/api/coach/plan?category` · POST `/api/coach/chat`, `/api/coach/explain` | connecté |
+
+Toutes les routes acceptent `?lang=fr|nl|en` (ou l’en-tête `Accept-Language`).
 
 ## Pistes pour la suite
 
@@ -152,6 +174,6 @@ Couvre l’inscription/connexion, la recherche géographique, tout le cycle d’
   mensuel des packs (aujourd’hui simulé) et la rémunération des moniteurs sur les heures incluses.
 - Suivi temps réel par WebSocket (aujourd’hui : rafraîchissement toutes les 5 s).
 - Vérification des agréments moniteurs (back-office) et des permis provisoires des élèves.
-- Traductions NL / DE / EN et banque de questions élargie (≥ 50 questions par catégorie, panneaux illustrés).
+- Traduction allemande (Communauté germanophone) et banque de questions élargie (≥ 50 questions par catégorie, panneaux illustrés).
   Les questions actuelles sont indicatives et doivent être validées par un moniteur agréé.
-- Agenda de disponibilités hebdomadaires pour les moniteurs, véhicule de l’élève pour la filière libre.
+- Tracés de parcours affinés par des moniteurs locaux (rues réelles, pièges connus de chaque centre).

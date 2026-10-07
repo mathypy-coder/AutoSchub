@@ -3,14 +3,16 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../auth.jsx';
 import { ErrorMessage } from '../components/ui.jsx';
 import { useServerConfig } from '../hooks.js';
+import { LanguageSwitcher, useT } from '../i18n.jsx';
 
 const DEMO_ACCOUNTS = [
-  { label: 'Démo élève', email: 'eleve@autoschub.be' },
-  { label: 'Démo élève avec pack', email: 'eleve.pack@autoschub.be' },
-  { label: 'Démo moniteur', email: 'moniteur@autoschub.be' },
+  { labelKey: 'login.demoStudent', email: 'eleve@autoschub.be' },
+  { labelKey: 'login.demoStudentPack', email: 'eleve.pack@autoschub.be' },
+  { labelKey: 'login.demoInstructor', email: 'moniteur@autoschub.be' },
 ];
 
 export default function Login() {
+  const t = useT();
   const { login, notice } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -31,7 +33,7 @@ export default function Login() {
       // Base temporaire : un compte créé avant un redémarrage n'existe plus. On le dit clairement.
       setError(
         err.status === 401 && temporary
-          ? 'Compte introuvable ou mot de passe incorrect. Sur ce serveur de démonstration, les comptes créés sont temporaires : réinscris-toi ou utilise un compte de démo ci-dessous.'
+          ? t('login.temporaryAccountError')
           : err.message,
       );
       setBusy(false);
@@ -40,23 +42,26 @@ export default function Login() {
 
   return (
     <div className="page page-narrow">
-      <Link to="/" className="back">
-        ← Retour
-      </Link>
-      <h1>Connexion</h1>
+      <div className="row-between">
+        <Link to="/" className="back">
+          {t('common.back')}
+        </Link>
+        <LanguageSwitcher />
+      </div>
+      <h1>{t('login.title')}</h1>
       {notice && <p className="notice">{notice}</p>}
       {temporary && (
         <p className="notice">
-          Mode démonstration : les comptes et réservations créés sont temporaires et peuvent disparaître.
+          {t('login.demoMode')}
         </p>
       )}
       <form onSubmit={submit} className="form">
         <label>
-          E-mail
+          {t('login.email')}
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" />
         </label>
         <label>
-          Mot de passe
+          {t('login.password')}
           <input
             type="password"
             value={password}
@@ -67,13 +72,13 @@ export default function Login() {
         </label>
         <ErrorMessage error={error} />
         <button className="btn btn-primary" disabled={busy}>
-          {busy ? 'Connexion…' : 'Se connecter'}
+          {busy ? t('login.submitting') : t('login.submit')}
         </button>
       </form>
 
       {demo && (
         <div className="demo-box">
-          <p className="muted">Essayer avec un compte de démonstration :</p>
+          <p className="muted">{t('login.tryDemo')}</p>
           <div className="row wrap">
             {DEMO_ACCOUNTS.map((d) => (
               <button
@@ -83,7 +88,7 @@ export default function Login() {
                 disabled={busy}
                 onClick={() => submit(null, { email: d.email, password: 'demo1234' })}
               >
-                {d.label}
+                {t(d.labelKey)}
               </button>
             ))}
           </div>
@@ -91,7 +96,7 @@ export default function Login() {
       )}
 
       <p className="muted center">
-        Pas encore de compte ? <Link to="/inscription">Inscription</Link>
+        {t('login.noAccount')} <Link to="/inscription">{t('login.register')}</Link>
       </p>
     </div>
   );

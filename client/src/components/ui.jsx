@@ -1,7 +1,8 @@
-import { STATUS_LABELS } from '../api.js';
+import { statusLabel } from '../api.js';
+import { translate } from '../i18n.jsx';
 
 export function Stars({ value, count }) {
-  if (value == null) return <span className="muted">Nouveau</span>;
+  if (value == null) return <span className="muted">{translate('common.new')}</span>;
   return (
     <span className="stars">
       ★ {value.toFixed(1)}
@@ -11,7 +12,7 @@ export function Stars({ value, count }) {
 }
 
 export function StatusBadge({ status }) {
-  return <span className={`badge badge-${status}`}>{STATUS_LABELS[status] ?? status}</span>;
+  return <span className={`badge badge-${status}`}>{statusLabel(status)}</span>;
 }
 
 export function ErrorMessage({ error }) {

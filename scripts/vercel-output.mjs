@@ -23,6 +23,7 @@ const fromServer = createRequire(join(ROOT, 'server/package.json'));
 try {
   fromServer.resolve('express');
   fromServer.resolve('@libsql/client/web');
+  fromServer.resolve('@anthropic-ai/sdk');
 } catch {
   console.log('Installation des dépendances du serveur…');
   execSync('npm install --workspaces --include-workspace-root --no-audit --no-fund', { cwd: ROOT, stdio: 'inherit' });
@@ -71,7 +72,7 @@ writeFileSync(
       handler: 'index.mjs',
       launcherType: 'Nodejs',
       shouldAddHelpers: false,
-      maxDuration: 10,
+      maxDuration: 30,
       regions: ['cdg1'],
     },
     null,

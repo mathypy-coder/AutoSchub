@@ -5,10 +5,12 @@ import { useAuth } from '../../auth.jsx';
 import MapView from '../../components/MapView.jsx';
 import { ErrorMessage, Stars } from '../../components/ui.jsx';
 import { usePolling } from '../../hooks.js';
+import { useT } from '../../i18n.jsx';
 
 const POSITION_INTERVAL_MS = 20000;
 
 export default function Dashboard() {
+  const t = useT();
   const { user } = useAuth();
   const { data: profileData, refresh: refreshProfile } = usePolling('/instructors/me/profile', 0);
   const { data: stats } = usePolling('/instructors/me/stats', 10000);
@@ -73,7 +75,7 @@ export default function Dashboard() {
   return (
     <div className="page">
       <div className="row-between">
-        <h1>Bonjour {user.firstName}</h1>
+        <h1>{t('dashboard.hello', { name: user.firstName })}</h1>
         {stats && <Stars value={stats.rating} count={stats.ratingCount} />}
       </div>
 
@@ -92,22 +94,22 @@ export default function Dashboard() {
         onClick={toggleOnline}
         disabled={busy || !profile}
       >
-        {online ? 'En ligne — toucher pour passer hors ligne' : 'GO — passer en ligne'}
+        {online ? t('dashboard.goOffline') : t('dashboard.goOnline')}
       </button>
       <p className="muted small center">
         {online
-          ? 'Les élèves proches peuvent vous réserver pour une leçon immédiate.'
-          : 'Hors ligne : seules les réservations planifiées vous parviennent.'}
+          ? t('dashboard.onlineHint')
+          : t('dashboard.offlineHint')}
       </p>
       <ErrorMessage error={error} />
 
-      <h2 className="section-title">Demandes ({requests.length})</h2>
-      {!requests.length && <p className="empty">Aucune nouvelle demande.</p>}
+      <h2 className="section-title">{t('dashboard.requests', { count: requests.length })}</h2>
+      {!requests.length && <p className="empty">{t('dashboard.noRequests')}</p>}
       {requests.map((b) => (
         <article key={b.id} className="card request">
           <div className="row-between">
             <strong>
-              {b.isInstant ? '⚡ Maintenant' : formatDateTime(b.startAt)} · {b.category}
+              {b.isInstant ? t('dashboard.now') : formatDateTime(b.startAt)} · {b.category}
             </strong>
             <strong>{formatPrice(b.price)}</strong>
           </div>
@@ -117,10 +119,10 @@ export default function Dashboard() {
           </p>
           <div className="row">
             <button type="button" className="btn btn-primary" onClick={() => answer(b.id, 'accepted')}>
-              Accepter
+              {t('dashboard.accept')}
             </button>
             <button type="button" className="btn btn-secondary" onClick={() => answer(b.id, 'declined')}>
-              Refuser
+              {t('dashboard.decline')}
             </button>
           </div>
         </article>
@@ -128,27 +130,28 @@ export default function Dashboard() {
 
       {stats && (
         <>
-          <h2 className="section-title">Mes gains</h2>
+          <h2 className="section-title">{t('dashboard.earnings')}</h2>
           <div className="stats">
             <div className="stat">
               <span className="stat-value">{formatPrice(stats.weekNet)}</span>
-              <span className="muted small">7 derniers jours</span>
+              <span className="muted small">{t('dashboard.last7Days')}</span>
             </div>
             <div className="stat">
               <span className="stat-value">{formatPrice(stats.net)}</span>
-              <span className="muted small">Total net</span>
+              <span className="muted small">{t('dashboard.totalNet')}</span>
             </div>
             <div className="stat">
               <span className="stat-value">{stats.lessons}</span>
-              <span className="muted small">Leçons</span>
+              <span className="muted small">{t('dashboard.lessons')}</span>
             </div>
             <div className="stat">
-              <span className="stat-value">{stats.hours} h</span>
-              <span className="muted small">Heures données</span>
+              <span className="stat-value">{t('dashboard.hoursValue', { hours: stats.hours })}</span>
+              <span className="muted small">{t('dashboard.hoursGiven')}</span>
             </div>
           </div>
           <p className="muted small">
-            Commission AutoSchub : {Math.round(stats.commissionRate * 100)} % · <Link to="/moniteur/lecons">Voir toutes mes leçons</Link>
+            {t('dashboard.commission', { rate: Math.round(stats.commissionRate * 100) })} ·{' '}
+            <Link to="/moniteur/lecons">{t('dashboard.allLessons')}</Link>
           </p>
         </>
       )}

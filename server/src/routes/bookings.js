@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { requireAuth } from '../auth.js';
 import { HttpError } from '../errors.js';
+import { localizeSkill, localizeSkillLevels } from '../i18n.js';
 import { serializeBooking } from '../serializers.js';
 import { quoteLesson } from '../subscriptions.js';
 import { BLOCKING_STATUSES, expireStaleBookings } from '../bookingRules.js';
@@ -230,9 +231,9 @@ export function bookingRoutes(db) {
     const lessonLevels = Object.fromEntries(forLesson.map((r) => [r.skill_id, r.level]));
     res.json({
       category: row.category,
-      levels: SKILL_LEVELS,
+      levels: localizeSkillLevels(SKILL_LEVELS, req.lang),
       skills: skillsForCategory(row.category).map((skill) => ({
-        ...skill,
+        ...localizeSkill(skill, req.lang),
         level: current[skill.id]?.level ?? 0,
         lessonLevel: lessonLevels[skill.id] ?? null,
       })),

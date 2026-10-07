@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { groupSkills, LevelBar } from '../components/SkillsSheet.jsx';
+import { LanguageSwitcher, useI18n, useT } from '../i18n.jsx';
 
 export default function Profile() {
+  const { t, locale } = useI18n();
   const { user, logout } = useAuth();
   const [bookings, setBookings] = useState([]);
   const [attempts, setAttempts] = useState([]);
@@ -36,15 +38,15 @@ export default function Profile() {
         </div>
       </div>
 
-      <h2 className="section-title">Ma progression</h2>
+      <h2 className="section-title">{t('profile.progress')}</h2>
       <div className="stats">
         <div className="stat">
           <span className="stat-value">{completed.length}</span>
-          <span className="muted small">Leçons terminées</span>
+          <span className="muted small">{t('profile.lessonsCompleted')}</span>
         </div>
         <div className="stat">
-          <span className="stat-value">{exams.length ? `${Math.round(best * 100)} %` : '—'}</span>
-          <span className="muted small">Meilleur examen blanc</span>
+          <span className="stat-value">{exams.length ? new Intl.NumberFormat(locale, { style: 'percent' }).format(Math.round(best * 100) / 100) : '—'}</span>
+          <span className="muted small">{t('profile.bestMock')}</span>
         </div>
       </div>
 
@@ -54,29 +56,34 @@ export default function Profile() {
 
       {Object.keys(hoursByCategory).length > 0 && (
         <div className="card">
-          <strong>Heures de conduite par permis</strong>
+          <strong>{t('profile.hoursByPermit')}</strong>
           {Object.entries(hoursByCategory).map(([cat, hours]) => (
             <div key={cat} className="row-between small">
-              <span>Permis {cat}</span>
-              <span>{hours.toFixed(1)} h</span>
+              <span>{t('profile.permit', { category: cat })}</span>
+              <span>{t('profile.hours', { hours: hours.toLocaleString(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) })}</span>
             </div>
           ))}
         </div>
       )}
 
       <div className="card">
-        <strong>Le parcours du permis en Belgique</strong>
+        <strong>{t('profile.journeyTitle')}</strong>
         <ol className="small steps">
-          <li>Réussir l’examen théorique (41/50) dans un centre agréé.</li>
-          <li>Obtenir un permis provisoire (filière libre avec guide ou filière école).</li>
-          <li>Suivre tes leçons pratiques avec un moniteur agréé — c’est ici !</li>
-          <li>Passer l’examen pratique, puis la séance de retour d’expérience si requise par ta Région.</li>
+          <li>{t('profile.step1')}</li>
+          <li>{t('profile.step2')}</li>
+          <li>{t('profile.step3')}</li>
+          <li>{t('profile.step4')}</li>
         </ol>
-        <p className="muted small">Les règles varient selon la Région (Wallonie, Bruxelles, Flandre) : vérifie les conditions à jour.</p>
+        <p className="muted small">{t('profile.regionsNote')}</p>
+      </div>
+
+      <div className="card">
+        <strong>{t('profile.language')}</strong>
+        <LanguageSwitcher />
       </div>
 
       <button type="button" className="btn btn-danger btn-block logout" onClick={logout}>
-        Se déconnecter
+        {t('profile.logout')}
       </button>
     </div>
   );
@@ -84,6 +91,7 @@ export default function Profile() {
 
 // Fiche de compétences : dernier niveau noté par les moniteurs pour chaque compétence.
 function SkillsOverview({ category }) {
+  const t = useT();
   const [data, setData] = useState(null);
 
   useEffect(() => {
@@ -95,9 +103,9 @@ function SkillsOverview({ category }) {
   return (
     <div className="card">
       <div className="row-between">
-        <strong>Ma fiche de compétences · permis {category}</strong>
+        <strong>{t('profile.skillsTitle', { category })}</strong>
         <span className="small">
-          {summary.mastered}/{summary.total} maîtrisées
+          {t('profile.mastered', { mastered: summary.mastered, total: summary.total })}
         </span>
       </div>
       <div className="progress">
@@ -114,7 +122,7 @@ function SkillsOverview({ category }) {
           ))}
         </div>
       ))}
-      <p className="muted small">Ton moniteur remplit la fiche après chaque leçon. Objectif : 80 % des compétences maîtrisées.</p>
+      <p className="muted small">{t('profile.skillsNote')}</p>
     </div>
   );
 }

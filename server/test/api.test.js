@@ -707,3 +707,156 @@ describe('configuration publique', () => {
     assert.equal(typeof data.demo, 'boolean');
   });
 });
+
+describe('langues', () => {
+  test('contenus et erreurs traduits selon ?lang', async () => {
+    const nl = await api('/api/permits?lang=nl');
+    const fr = await api('/api/permits');
+    assert.notEqual(nl.data.groups[0].label, fr.data.groups[0].label);
+    const plans = await api('/api/subscriptions/plans?lang=en');
+    assert.ok(plans.data.plans.some((p) => p.id === 'libre' && p.name === 'Supervised driving'));
+    const err = await api('/api/theory/quiz?category=ZZ&lang=en');
+    assert.equal(err.status, 400);
+    assert.doesNotMatch(err.data.error, /Catégorie/);
+  });
+
+  test('quiz en néerlandais : thème source conservé, libellé traduit', async () => {
+    const { data } = await api('/api/theory/quiz?category=B&mode=practice&count=3&lang=nl');
+    for (const q of data.questions) {
+      const source = QUESTIONS.find((x) => x.id === q.id);
+      assert.equal(q.theme, source.theme);
+      assert.ok(q.themeLabel);
+      assert.notEqual(q.question, source.question);
+    }
+  });
+});
+
+describe('filière libre', () => {
+  let token;
+  before(async () => {
+    const { data } = await api('/api/auth/register', {
+      method: 'POST',
+      body: { role: 'student', firstName: 'Lina', lastName: 'Libre', email: 'lina@test.be', password: 'motdepasse' },
+    });
+    token = data.token;
+  });
+
+  test('règles des trois Régions', async () => {
+    const { data } = await api('/api/free-track/rules?lang=nl');
+    assert.deepEqual(data.regions.map((r) => r.id).sort(), ['bruxelles', 'flandre', 'wallonie']);
+    assert.equal(data.regions.find((r) => r.id === 'flandre').title, 'Vlaanderen');
+  });
+
+  test('parcours autour d’un centre : boucle urbaine gratuite, le reste avec le pack', async () => {
+    const free = await api('/api/free-track/routes/evere', { token });
+    assert.equal(free.data.routes.length, 3);
+    assert.equal(free.data.unlocked, false);
+    assert.ok(free.data.routes[0].mapsUrl.startsWith('https://www.google.com/maps/dir/'));
+    assert.ok(free.data.routes.slice(1).every((r) => r.locked && !r.mapsUrl));
+    assert.equal((await api('/api/free-track/routes/inconnu', { token })).status, 404);
+  });
+
+  test('profil, carnet de bord et progression', async () => {
+    const start = await api('/api/free-track/me', { token });
+    assert.equal(start.data.nextStep.id, 'region');
+
+    const bad = await api('/api/free-track/me', { method: 'PUT', token, body: { region: 'mars' } });
+    assert.equal(bad.status, 400);
+
+    const provisional = new Date(Date.now() - 4 * 31 * 86400000).toISOString().slice(0, 10);
+    const saved = await api('/api/free-track/me', {
+      method: 'PUT',
+      token,
+      body: { region: 'wallonie', examCenterId: 'evere', provisionalAt: provisional, guides: ['Papa', 'Maman'] },
+    });
+    assert.equal(saved.status, 200);
+    assert.equal(saved.data.minMonths, 3);
+    assert.equal(saved.data.steps.find((s) => s.id === 'duration').done, true);
+
+    const today = new Date().toISOString().slice(0, 10);
+    const entry = await api('/api/free-track/roadbook', {
+      method: 'POST',
+      token,
+      body: { date: today, durationMin: 60, distanceKm: 42.5, conditions: ['ville', 'pluie', 'inconnu'], routeId: 'evere:ville', guideName: 'Papa' },
+    });
+    assert.equal(entry.status, 201);
+    assert.deepEqual(entry.data.entry.conditions, ['ville', 'pluie']);
+    const future = await api('/api/free-track/roadbook', {
+      method: 'POST',
+      token,
+      body: { date: '2999-01-01', durationMin: 60, distanceKm: 10 },
+    });
+    assert.equal(future.status, 400);
+
+    const me = await api('/api/free-track/me', { token });
+    assert.equal(me.data.totals.km, 43);
+    assert.deepEqual(me.data.totals.routes, ['evere:ville']);
+    assert.equal(me.data.steps.find((s) => s.id === 'routes').detail.includes('1'), true);
+
+    const del = await api(`/api/free-track/roadbook/${entry.data.entry.id}`, { method: 'DELETE', token });
+    assert.equal(del.status, 200);
+    assert.equal((await api('/api/free-track/roadbook', { token })).data.entries.length, 0);
+  });
+
+  test('pack Filière libre : parcours dédié et tous les parcours débloqués', async () => {
+    const sub = await api('/api/subscriptions', { method: 'POST', token, body: { planId: 'libre', category: 'B' } });
+    assert.equal(sub.status, 201);
+    assert.equal(sub.data.journey.freeTrack, true);
+    assert.ok(sub.data.journey.steps.some((s) => s.id === 'roadbook'));
+    const routes = await api('/api/free-track/routes/evere', { token });
+    assert.equal(routes.data.unlocked, true);
+    assert.ok(routes.data.routes.every((r) => r.mapsUrl));
+
+    // Déclarer la séance avec le guide depuis le pack.
+    const today = new Date().toISOString().slice(0, 10);
+    const patched = await api('/api/subscriptions/me/journey', { method: 'PATCH', token, body: { guideSessionAt: today } });
+    assert.equal(patched.status, 200);
+    assert.equal(patched.data.journey.steps.find((s) => s.id === 'guide').done, true);
+  });
+});
+
+describe('coach IA', () => {
+  let token;
+  before(async () => {
+    delete process.env.ANTHROPIC_API_KEY; // coach hors ligne pendant les tests
+    token = await login('eleve@autoschub.be');
+  });
+
+  test('statut et coach hors ligne appuyé sur la banque de questions', async () => {
+    const status = await api('/api/coach/status', { token });
+    assert.equal(status.data.ai, false);
+    const { data } = await api('/api/coach/chat', {
+      method: 'POST',
+      token,
+      body: { category: 'B', messages: [{ role: 'user', content: 'Qui a la priorité à un carrefour sans signalisation ?' }] },
+    });
+    assert.equal(data.source, 'offline');
+    assert.match(data.reply, /droite/);
+    assert.equal(data.quota.used, 1);
+  });
+
+  test('explication d’une erreur dans la langue demandée', async () => {
+    const q = QUESTIONS.find((x) => x.id === 'prio-1');
+    const { data } = await api('/api/coach/explain?lang=en', {
+      method: 'POST',
+      token,
+      body: { category: 'B', questionId: q.id, given: 0 },
+    });
+    assert.equal(data.source, 'offline');
+    assert.match(data.reply, /correct answer/i);
+  });
+
+  test('plan de révision et quota quotidien', async () => {
+    const plan = await api('/api/coach/plan?category=B', { token });
+    assert.equal(plan.data.days.length, 7);
+    assert.ok(plan.data.days.every((d) => d.tasks.length));
+    // Sans pack : 10 questions par jour.
+    for (let i = 0; i < 8; i += 1) {
+      await api('/api/coach/chat', { method: 'POST', token, body: { messages: [{ role: 'user', content: 'feu orange' }] } });
+    }
+    const over = await api('/api/coach/chat', { method: 'POST', token, body: { messages: [{ role: 'user', content: 'feu orange' }] } });
+    assert.equal(over.status, 429);
+    const empty = await api('/api/coach/chat', { method: 'POST', token, body: { messages: [] } });
+    assert.equal(empty.status, 400);
+  });
+});

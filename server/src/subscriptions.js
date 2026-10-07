@@ -1,6 +1,9 @@
 import { PERIOD_DAYS, PLANS_BY_ID, TARGET_HOURS } from './data/plans.js';
 import { PERMITS } from './data/permits.js';
 import { skillsSummary } from './progress.js';
+import { journeyText } from './data/journeyText.js';
+import { freeTrackProgress } from './freeTrack.js';
+import { localizePlan } from './i18n.js';
 
 const DAY_MS = 24 * 3600 * 1000;
 const COUNTED_STATUSES = ['pending', 'accepted', 'en_route', 'in_progress', 'completed'];
@@ -101,7 +104,24 @@ export async function hasActiveSubscription(db, studentId) {
   return Boolean(await getActiveSubscription(db, studentId));
 }
 
-export async function buildJourney(db, sub) {
+export async function buildJourney(db, sub, lang = 'fr') {
+  const text = journeyText(lang);
+  // Pack filière libre : parcours avec guide (permis provisoire M36, carnet de bord, délais régionaux).
+  if (PLANS_BY_ID.get(sub.plan_id)?.freeTrack) {
+    const ft = await freeTrackProgress(db, sub.student_id, lang);
+    return {
+      category: sub.category,
+      theoryCategory: PERMITS.find((p) => p.code === sub.category)?.theoryCategory ?? sub.category,
+      freeTrack: true,
+      region: ft.region,
+      km: ft.totals.km,
+      kmTarget: ft.kmTarget,
+      eligibleFrom: ft.eligibleFrom,
+      steps: [{ id: 'pack', label: text('pack'), done: true, date: toIso(sub.created_at) }, ...ft.steps],
+      nextStep: ft.nextStep,
+      coach: null,
+    };
+  }
   const permit = PERMITS.find((p) => p.code === sub.category);
   const theoryCategory = permit?.theoryCategory ?? sub.category;
   const bestExam = await db.get(
@@ -132,46 +152,46 @@ export async function buildJourney(db, sub) {
   const theoryPassed = Boolean(bestExam?.passed);
 
   const steps = [
-    { id: 'pack', label: 'Pack activé', done: true, date: toIso(sub.created_at) },
+    { id: 'pack', label: text('pack'), done: true, date: toIso(sub.created_at) },
     {
       id: 'theory',
-      label: 'Théorie réussie (examen blanc)',
+      label: text('theory'),
       done: theoryPassed,
       date: theoryPassed ? toIso(bestExam.created_at) : null,
-      detail: bestExam ? `Meilleur score : ${bestExam.score}/${bestExam.max_score}` : 'Aucun examen blanc passé',
+      detail: bestExam ? text('theoryBest', { score: bestExam.score, max: bestExam.max_score }) : text('theoryNone'),
     },
     {
       id: 'provisional',
-      label: 'Permis provisoire obtenu',
+      label: text('provisional'),
       done: Boolean(sub.provisional_at),
       date: sub.provisional_at,
       declarable: true,
     },
     {
       id: 'driving',
-      label: `Heures de conduite (${targetHours} h conseillées)`,
+      label: text('driving', { target: targetHours }),
       done: hours >= targetHours,
-      detail: `${hours} h sur ${targetHours} h · ${driving.lessons} leçon(s)`,
+      detail: text('drivingDetail', { hours, target: targetHours, lessons: driving.lessons }),
       progress: Math.min(1, hours / targetHours),
     },
     {
       id: 'skills',
-      label: 'Compétences maîtrisées (fiche du moniteur)',
+      label: text('skills'),
       // Prêt pour l'examen : au moins 80 % des compétences notées « maîtrisé ».
       done: skills.mastered >= Math.ceil(skills.total * 0.8),
-      detail: `${skills.mastered} sur ${skills.total} maîtrisées`,
+      detail: text('skillsDetail', { mastered: skills.mastered, total: skills.total }),
       progress: skills.progress,
     },
     {
       id: 'exam',
-      label: 'Examen pratique planifié',
+      label: text('exam'),
       done: Boolean(sub.exam_date),
       date: sub.exam_date,
       declarable: true,
     },
     {
       id: 'license',
-      label: 'Permis obtenu 🎉',
+      label: text('license'),
       done: Boolean(sub.license_obtained_at),
       date: sub.license_obtained_at,
       declarable: true,
@@ -179,14 +199,6 @@ export async function buildJourney(db, sub) {
   ];
 
   const next = steps.find((s) => !s.done);
-  const ADVICE = {
-    theory: 'Passe des examens blancs jusqu’à atteindre 41/50, puis inscris-toi à l’examen officiel.',
-    provisional: 'Théorie en poche ? Demande ton permis provisoire à ta commune, puis déclare-le ici.',
-    driving: 'Réserve tes leçons régulièrement : 2 à 3 h par semaine, c’est le bon rythme.',
-    skills: 'Demande à ton moniteur de remplir ta fiche après chaque leçon : elle montre ce qu’il reste à travailler.',
-    exam: 'Ton moniteur estime que tu es prêt·e ? Réserve ton examen pratique et indique sa date.',
-    license: 'Dernière ligne droite : une leçon de révision juste avant l’examen fait la différence.',
-  };
 
   return {
     category: sub.category,
@@ -194,13 +206,13 @@ export async function buildJourney(db, sub) {
     hours,
     targetHours,
     steps,
-    nextStep: next ? { id: next.id, advice: ADVICE[next.id] } : null,
+    nextStep: next ? { id: next.id, advice: text.advice(next.id) } : null,
     coach: coach ?? null,
   };
 }
 
-export async function serializeSubscription(db, sub) {
-  const plan = PLANS_BY_ID.get(sub.plan_id);
+export async function serializeSubscription(db, sub, lang = 'fr') {
+  const plan = localizePlan(PLANS_BY_ID.get(sub.plan_id), lang);
   const used = await usedMinutes(db, sub);
   return {
     id: sub.id,
@@ -210,7 +222,7 @@ export async function serializeSubscription(db, sub) {
     currentPeriodStart: sub.current_period_start,
     currentPeriodEnd: sub.current_period_end,
     cancelAtPeriodEnd: Boolean(sub.cancel_at_period_end),
-    pendingPlan: sub.pending_plan_id ? (PLANS_BY_ID.get(sub.pending_plan_id) ?? null) : null,
+    pendingPlan: sub.pending_plan_id ? localizePlan(PLANS_BY_ID.get(sub.pending_plan_id), lang) : null,
     licenseObtained: Boolean(sub.license_obtained_at),
     includedMinutes: plan.includedMinutes,
     usedMinutes: used,

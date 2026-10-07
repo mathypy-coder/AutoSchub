@@ -1,0 +1,51 @@
+// Écran de connexion.
+export default {
+  fr: {
+    title: 'Connexion',
+    demoStudent: 'Démo élève',
+    demoStudentPack: 'Démo élève avec pack',
+    demoInstructor: 'Démo moniteur',
+    temporaryAccountError:
+      'Compte introuvable ou mot de passe incorrect. Sur ce serveur de démonstration, les comptes créés sont temporaires : réinscris-toi ou utilise un compte de démo ci-dessous.',
+    demoMode: 'Mode démonstration : les comptes et réservations créés sont temporaires et peuvent disparaître.',
+    email: 'E-mail',
+    password: 'Mot de passe',
+    submitting: 'Connexion…',
+    submit: 'Se connecter',
+    tryDemo: 'Essayer avec un compte de démonstration :',
+    noAccount: 'Pas encore de compte ?',
+    register: 'Inscription',
+  },
+  nl: {
+    title: 'Aanmelden',
+    demoStudent: 'Demo leerling',
+    demoStudentPack: 'Demo leerling met pakket',
+    demoInstructor: 'Demo instructeur',
+    temporaryAccountError:
+      'Account niet gevonden of wachtwoord onjuist. Op deze demoserver zijn aangemaakte accounts tijdelijk: registreer je opnieuw of gebruik hieronder een demo-account.',
+    demoMode: 'Demomodus: aangemaakte accounts en boekingen zijn tijdelijk en kunnen verdwijnen.',
+    email: 'E-mail',
+    password: 'Wachtwoord',
+    submitting: 'Aanmelden…',
+    submit: 'Aanmelden',
+    tryDemo: 'Probeer het met een demo-account:',
+    noAccount: 'Nog geen account?',
+    register: 'Registreren',
+  },
+  en: {
+    title: 'Log in',
+    demoStudent: 'Demo learner',
+    demoStudentPack: 'Demo learner with plan',
+    demoInstructor: 'Demo instructor',
+    temporaryAccountError:
+      'Account not found or wrong password. On this demo server, new accounts are temporary: sign up again or use a demo account below.',
+    demoMode: 'Demo mode: accounts and bookings you create are temporary and may disappear.',
+    email: 'Email',
+    password: 'Password',
+    submitting: 'Logging in…',
+    submit: 'Log in',
+    tryDemo: 'Try it with a demo account:',
+    noAccount: 'No account yet?',
+    register: 'Sign up',
+  },
+};

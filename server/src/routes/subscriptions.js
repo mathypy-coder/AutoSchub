@@ -5,13 +5,15 @@ import { FREE_EXAMS_PER_WEEK, PERIOD_DAYS, PLANS, PLANS_BY_ID, TARGET_HOURS } fr
 import { HttpError } from '../errors.js';
 import { addDays, buildJourney, getActiveSubscription, serializeSubscription } from '../subscriptions.js';
 import { isIsoDate } from '../validation.js';
+import { saveFreeTrackProfile } from '../freeTrack.js';
+import { localizePlan } from '../i18n.js';
 
 export function subscriptionRoutes(db) {
   const router = Router();
 
-  router.get('/plans', (_req, res) => {
+  router.get('/plans', (req, res) => {
     res.json({
-      plans: PLANS,
+      plans: PLANS.map((p) => localizePlan(p, req.lang)),
       targetHours: TARGET_HOURS,
       periodDays: PERIOD_DAYS,
       freeExamsPerWeek: FREE_EXAMS_PER_WEEK,
@@ -27,7 +29,10 @@ export function subscriptionRoutes(db) {
   };
 
   const respond = async (res, sub) =>
-    res.json({ subscription: await serializeSubscription(db, sub), journey: await buildJourney(db, sub) });
+    res.json({
+      subscription: await serializeSubscription(db, sub, res.req.lang),
+      journey: await buildJourney(db, sub, res.req.lang),
+    });
 
   router.get('/me', async (req, res) => {
     const sub = await getActiveSubscription(db, req.user.id);
@@ -96,8 +101,26 @@ export function subscriptionRoutes(db) {
     // Permis obtenu : plus de renouvellement, le pack se termine à la fin de la période déjà payée
     // (et non immédiatement, ce qui permettrait de reprendre aussitôt un pack aux heures neuves).
     if (updates.license_obtained_at) updates.cancel_at_period_end = 1;
+    // Séance avec le guide (filière libre) : enregistrée dans le profil filière libre.
+    const guideSessionAt = body.guideSessionAt;
+    if (guideSessionAt !== undefined && guideSessionAt !== null && !isIsoDate(guideSessionAt)) {
+      throw new HttpError(400, 'Date invalide (AAAA-MM-JJ).');
+    }
+    // Pack filière libre : les étapes déclarées alimentent aussi le profil filière libre.
+    if (PLANS_BY_ID.get(sub.plan_id)?.freeTrack) {
+      await saveFreeTrackProfile(db, req.user.id, {
+        category: sub.category,
+        provisionalAt: updates.provisional_at,
+        examDate: updates.exam_date,
+        licenseAt: updates.license_obtained_at,
+        guideSessionAt,
+      });
+    }
     const columns = Object.keys(updates);
-    if (!columns.length) throw new HttpError(400, 'Rien à mettre à jour.');
+    if (!columns.length) {
+      if (guideSessionAt !== undefined) return respond(res, sub);
+      throw new HttpError(400, 'Rien à mettre à jour.');
+    }
     await db.run(
       `UPDATE subscriptions SET ${columns.map((c) => `${c} = ?`).join(', ')} WHERE id = ?`,
       ...Object.values(updates),

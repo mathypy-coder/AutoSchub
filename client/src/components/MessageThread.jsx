@@ -1,13 +1,18 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api.js';
 import { usePolling } from '../hooks.js';
 import { ErrorMessage } from './ui.jsx';
+import { useI18n } from '../i18n.jsx';
 
-const TIME = new Intl.DateTimeFormat('fr-BE', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 const toDate = (value) => new Date(value.includes('T') ? value : `${value.replace(' ', 'T')}Z`);
 
 // Conversation élève ↔ moniteur pour une leçon (rafraîchie toutes les 5 s quand elle est ouverte).
 export default function MessageThread({ bookingId, onRead }) {
+  const { t, locale } = useI18n();
+  const time = useMemo(
+    () => new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }),
+    [locale],
+  );
   const { data, error, refresh } = usePolling(`/bookings/${bookingId}/messages`, 5000);
   const [body, setBody] = useState('');
   const [sending, setSending] = useState(false);
@@ -42,13 +47,13 @@ export default function MessageThread({ bookingId, onRead }) {
   return (
     <div className="thread">
       <ErrorMessage error={error} />
-      {data && !count && <p className="muted small center">Aucun message. Pose ta question ici.</p>}
+      {data && !count && <p className="muted small center">{t('messages.empty')}</p>}
       <div className="thread-messages">
         {data?.messages.map((m) => (
           <div key={m.id} className={`bubble ${m.mine ? 'bubble-mine' : ''}`}>
             {!m.mine && <strong className="small">{m.senderName}</strong>}
             <p>{m.body}</p>
-            <span className="bubble-time">{TIME.format(toDate(m.createdAt))}</span>
+            <span className="bubble-time">{time.format(toDate(m.createdAt))}</span>
           </div>
         ))}
         <div ref={endRef} />
@@ -58,12 +63,12 @@ export default function MessageThread({ bookingId, onRead }) {
           <input
             value={body}
             onChange={(e) => setBody(e.target.value)}
-            placeholder="Écrire un message…"
+            placeholder={t('messages.placeholder')}
             maxLength={1000}
-            aria-label="Message"
+            aria-label={t('messages.label')}
           />
           <button className="btn btn-primary" disabled={sending || !body.trim()}>
-            Envoyer
+            {t('messages.send')}
           </button>
         </form>
       )}

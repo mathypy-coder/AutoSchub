@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { EXAM_CENTERS, OPERATORS, REGIONS } from '../data/examCenters.js';
 import { distanceKm } from '../geo.js';
+import { localizeRegion } from '../i18n.js';
 
 const normalize = (text) =>
   String(text ?? '')
@@ -41,7 +42,7 @@ export function examCenterRoutes() {
       })
       .sort((a, b) => (from ? a.distanceKm - b.distanceKm : a.name.localeCompare(b.name, 'fr')));
 
-    res.json({ regions: REGIONS, total: EXAM_CENTERS.length, centers });
+    res.json({ regions: REGIONS.map((r) => localizeRegion(r, req.lang)), total: EXAM_CENTERS.length, centers });
   });
 
   return router;

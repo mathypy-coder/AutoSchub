@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './auth.jsx';
+import { useT } from './i18n.jsx';
 import BottomNav from './components/BottomNav.jsx';
 import Welcome from './pages/Welcome.jsx';
 import Login from './pages/Login.jsx';
@@ -14,32 +15,35 @@ const Lessons = lazy(() => import('./pages/Lessons.jsx'));
 const Theory = lazy(() => import('./pages/student/Theory.jsx'));
 const Pack = lazy(() => import('./pages/student/Pack.jsx'));
 const ExamCenters = lazy(() => import('./pages/ExamCenters.jsx'));
+const FreeTrack = lazy(() => import('./pages/student/FreeTrack.jsx'));
+const Coach = lazy(() => import('./pages/student/Coach.jsx'));
 const Dashboard = lazy(() => import('./pages/instructor/Dashboard.jsx'));
 const InstructorProfile = lazy(() => import('./pages/instructor/InstructorProfile.jsx'));
 
 const STUDENT_NAV = [
-  { to: '/reserver', label: 'Réserver', icon: '🚗' },
-  { to: '/lecons', label: 'Mes leçons', icon: '📅' },
-  { to: '/theorie', label: 'Théorie', icon: '📝' },
-  { to: '/centres', label: 'Centres', icon: '🏁' },
-  { to: '/pack', label: 'Mon pack', icon: '🎟️' },
-  { to: '/profil', label: 'Profil', icon: '👤' },
+  { to: '/reserver', label: 'common.nav_book', icon: '🚗' },
+  { to: '/lecons', label: 'common.nav_lessons', icon: '📅' },
+  { to: '/theorie', label: 'common.nav_theory', icon: '📝' },
+  { to: '/centres', label: 'common.nav_centers', icon: '🏁' },
+  { to: '/pack', label: 'common.nav_pack', icon: '🎟️' },
+  { to: '/profil', label: 'common.nav_profile', icon: '👤' },
 ];
 
 const INSTRUCTOR_NAV = [
-  { to: '/moniteur', label: 'Conduire', icon: '🟢' },
-  { to: '/moniteur/lecons', label: 'Leçons', icon: '📅' },
-  { to: '/moniteur/centres', label: 'Centres', icon: '🏁' },
-  { to: '/moniteur/profil', label: 'Profil', icon: '👤' },
+  { to: '/moniteur', label: 'common.nav_drive', icon: '🟢' },
+  { to: '/moniteur/lecons', label: 'common.nav_instructorLessons', icon: '📅' },
+  { to: '/moniteur/centres', label: 'common.nav_centers', icon: '🏁' },
+  { to: '/moniteur/profil', label: 'common.nav_profile', icon: '👤' },
 ];
 
 function Shell({ nav, children }) {
+  const t = useT();
   return (
     <div className="shell">
       <main className="shell-main">
-        <Suspense fallback={<div className="page muted">Chargement…</div>}>{children}</Suspense>
+        <Suspense fallback={<div className="page muted">{t('common.loading')}</div>}>{children}</Suspense>
       </main>
-      <BottomNav items={nav} />
+      <BottomNav items={nav.map((item) => ({ ...item, label: t(item.label) }))} />
     </div>
   );
 }
@@ -82,6 +86,8 @@ export default function App() {
         <Route path="/theorie" element={<Theory />} />
         <Route path="/pack" element={<Pack />} />
         <Route path="/centres" element={<ExamCenters />} />
+        <Route path="/libre" element={<FreeTrack />} />
+        <Route path="/coach" element={<Coach />} />
         <Route path="/profil" element={<Profile />} />
         <Route path="*" element={<Navigate to="/reserver" replace />} />
       </Routes>
