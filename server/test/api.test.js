@@ -690,6 +690,32 @@ describe('théorie adaptative', () => {
     assert.equal(cleared.status, 404);
   });
 
+  test('un quiz rejoué ne fausse pas les statistiques ni la révision', async () => {
+    const { data: reg } = await api('/api/auth/register', {
+      method: 'POST',
+      body: { role: 'student', firstName: 'Rejeu', lastName: 'Quiz', email: 'rejeu@test.be', password: 'motdepasse' },
+    });
+    const token = reg.token;
+    const wrong = await api('/api/theory/quiz?category=B&mode=practice&count=5', { token });
+    await api('/api/theory/submit', { method: 'POST', token, body: { quizToken: wrong.data.quizToken, answers: {} } });
+    const before = await api('/api/theory/insights?category=B', { token });
+    assert.equal(before.data.toReview, 5);
+
+    // Un quiz réussi, renvoyé plusieurs fois : seul le premier envoi compte.
+    const review = await api('/api/theory/quiz?category=B&mode=review', { token });
+    const ids = review.data.questions.map((q) => q.id);
+    const right = Object.fromEntries(QUESTIONS.filter((q) => ids.includes(q.id)).map((q) => [q.id, q.answer]));
+    const body = { quizToken: review.data.quizToken, answers: right };
+    assert.equal((await api('/api/theory/submit', { method: 'POST', token, body })).status, 200);
+    assert.equal((await api('/api/theory/submit', { method: 'POST', token, body })).status, 409);
+
+    // Une seule bonne réponse d'affilée : les erreurs restent à revoir (il en faut deux).
+    const after = await api('/api/theory/insights?category=B', { token });
+    assert.equal(after.data.toReview, 5);
+    const answered = after.data.themes.reduce((sum, t) => sum + t.answered, 0);
+    assert.equal(answered, 10);
+  });
+
   test('score de préparation', () => {
     const themes = ['a', 'b'];
     assert.equal(readinessScore([], [], themes), 0);
@@ -745,6 +771,14 @@ describe('filière libre', () => {
     const { data } = await api('/api/free-track/rules?lang=nl');
     assert.deepEqual(data.regions.map((r) => r.id).sort(), ['bruxelles', 'flandre', 'wallonie']);
     assert.equal(data.regions.find((r) => r.id === 'flandre').title, 'Vlaanderen');
+  });
+
+  test('identifiant de parcours exact', async () => {
+    const { isRouteId } = await import('../src/data/practiceRoutes.js');
+    const [first] = (await api('/api/free-track/routes/evere', { token })).data.routes;
+    assert.equal(isRouteId(first.id), true);
+    assert.equal(isRouteId(`${first.id}:extra`), false);
+    assert.equal(isRouteId(42), false);
   });
 
   test('parcours autour d’un centre : boucle urbaine gratuite, le reste avec le pack', async () => {

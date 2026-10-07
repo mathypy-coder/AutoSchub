@@ -31,6 +31,13 @@ const TRANSITIONS = {
   in_progress: { completed: 'instructor' },
 };
 
+// Coordonnée optionnelle : null si absente ou hors bornes (Number(null) vaudrait 0).
+const coordinate = (value, max) => {
+  if (value === null || value === undefined || value === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) && Math.abs(n) <= max ? n : null;
+};
+
 const overlaps = (startA, durA, startB, durB) => {
   const a0 = Date.parse(startA);
   const b0 = Date.parse(startB);
@@ -159,8 +166,8 @@ export function bookingRoutes(db) {
         duration,
         isInstant ? 1 : 0,
         address,
-        Number.isFinite(Number(pickupLat)) ? Number(pickupLat) : null,
-        Number.isFinite(Number(pickupLng)) ? Number(pickupLng) : null,
+        coordinate(pickupLat, 90),
+        coordinate(pickupLng, 180),
         quote.lessonCents,
         quote.studentPriceCents,
         quote.coveredMinutes,

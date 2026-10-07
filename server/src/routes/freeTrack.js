@@ -8,6 +8,7 @@ import { HttpError } from '../errors.js';
 import { freeTrackProgress, saveFreeTrackProfile } from '../freeTrack.js';
 import { getActiveSubscription } from '../subscriptions.js';
 import { isIsoDate } from '../validation.js';
+import { utcToBrussels } from '../time.js';
 
 const MAX_ENTRIES = 1000;
 
@@ -119,7 +120,8 @@ export function freeTrackRoutes(db) {
   router.post('/roadbook', async (req, res) => {
     const b = req.body ?? {};
     if (!isIsoDate(b.date)) throw new HttpError(400, 'Date invalide (AAAA-MM-JJ).');
-    if (b.date > new Date().toISOString().slice(0, 10)) throw new HttpError(400, 'Le trajet ne peut pas être dans le futur.');
+    // « Aujourd'hui » à Bruxelles : un trajet saisi juste après minuit n'est pas refusé.
+    if (b.date > utcToBrussels(Date.now()).date) throw new HttpError(400, 'Le trajet ne peut pas être dans le futur.');
     const durationMin = Math.trunc(Number(b.durationMin));
     const distanceKm = Math.round(Number(b.distanceKm) * 10) / 10;
     if (!(durationMin >= 5 && durationMin <= 720)) throw new HttpError(400, 'Durée invalide (5 à 720 minutes).');

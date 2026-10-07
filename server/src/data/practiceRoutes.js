@@ -195,6 +195,7 @@ export function routesForCenter(centerId, lang = 'fr') {
 }
 
 export const isRouteId = (id) => {
-  const [centerId, type] = String(id ?? '').split(':');
-  return EXAM_CENTERS.some((c) => c.id === centerId) && ROUTE_TYPES.some((r) => r.type === type);
+  if (typeof id !== 'string') return false;
+  const [centerId, type, ...rest] = id.split(':');
+  return !rest.length && EXAM_CENTERS.some((c) => c.id === centerId) && ROUTE_TYPES.some((r) => r.type === type);
 };

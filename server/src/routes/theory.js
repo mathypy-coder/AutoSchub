@@ -87,43 +87,55 @@ async function assertExamAllowed(db, user) {
 // Une question ratée revient en révision jusqu'à 2 bonnes réponses d'affilée (répétition espacée).
 const REVIEW_STREAK_TO_CLEAR = 2;
 
-async function recordLearning(db, userId, category, corrections) {
-  await db.transaction(async (tx) => {
-    for (const c of corrections) {
-      await tx.run(
-        `INSERT INTO theory_theme_stats (user_id, category, theme, answered, correct) VALUES (?, ?, ?, 1, ?)
-         ON CONFLICT (user_id, category, theme) DO UPDATE SET answered = answered + 1, correct = correct + excluded.correct`,
-        userId,
-        category,
-        c.theme,
-        c.correct ? 1 : 0,
-      );
-      if (!c.correct) {
-        await tx.run(
-          `INSERT INTO theory_mistakes (user_id, question_id, category, wrong_count, streak) VALUES (?, ?, ?, 1, 0)
-           ON CONFLICT (user_id, question_id, category)
-             DO UPDATE SET wrong_count = wrong_count + 1, streak = 0, updated_at = datetime('now')`,
-          userId,
-          c.id,
-          category,
-        );
-      } else {
-        await tx.run(
-          `UPDATE theory_mistakes SET streak = streak + 1, updated_at = datetime('now')
-             WHERE user_id = ? AND question_id = ? AND category = ?`,
-          userId,
-          c.id,
-          category,
-        );
-      }
-    }
+// À appeler dans la transaction qui enregistre la tentative : un quiz déjà corrigé
+// (jeton rejoué, double envoi) ne compte donc jamais deux fois.
+async function recordLearning(tx, userId, category, corrections) {
+  // Réussite par thème : une écriture par thème plutôt qu'une par question (moins d'allers-retours vers Turso).
+  const byTheme = new Map();
+  for (const c of corrections) {
+    const t = byTheme.get(c.theme) ?? { answered: 0, correct: 0 };
+    t.answered += 1;
+    t.correct += c.correct ? 1 : 0;
+    byTheme.set(c.theme, t);
+  }
+  for (const [theme, t] of byTheme) {
     await tx.run(
-      'DELETE FROM theory_mistakes WHERE user_id = ? AND category = ? AND streak >= ?',
+      `INSERT INTO theory_theme_stats (user_id, category, theme, answered, correct) VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT (user_id, category, theme) DO UPDATE SET answered = answered + excluded.answered,
+         correct = correct + excluded.correct`,
       userId,
       category,
-      REVIEW_STREAK_TO_CLEAR,
+      theme,
+      t.answered,
+      t.correct,
     );
-  });
+  }
+  for (const c of corrections) {
+    if (!c.correct) {
+      await tx.run(
+        `INSERT INTO theory_mistakes (user_id, question_id, category, wrong_count, streak) VALUES (?, ?, ?, 1, 0)
+         ON CONFLICT (user_id, question_id, category)
+           DO UPDATE SET wrong_count = wrong_count + 1, streak = 0, updated_at = datetime('now')`,
+        userId,
+        c.id,
+        category,
+      );
+    } else {
+      await tx.run(
+        `UPDATE theory_mistakes SET streak = streak + 1, updated_at = datetime('now')
+           WHERE user_id = ? AND question_id = ? AND category = ?`,
+        userId,
+        c.id,
+        category,
+      );
+    }
+  }
+  await tx.run(
+    'DELETE FROM theory_mistakes WHERE user_id = ? AND category = ? AND streak >= ?',
+    userId,
+    category,
+    REVIEW_STREAK_TO_CLEAR,
+  );
 }
 
 // Score de préparation (0–100) : 70 % moyenne des 3 derniers examens blancs,
@@ -275,25 +287,27 @@ export function theoryRoutes(db) {
     if (quiz.mode === 'exam') await assertExamAllowed(db, req.user);
 
     const result = gradeAnswers(questions, answers);
-    if (req.user) await recordLearning(db, req.user.id, quiz.category, result.corrections);
     if (req.user) {
       try {
-        await db.run(
-          `INSERT INTO theory_attempts (user_id, category, mode, theme, score, max_score, correct, total, grave_faults,
-             passed, quiz_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          req.user.id,
-          quiz.category,
-          quiz.mode,
-          quiz.theme,
-          result.score,
-          result.maxScore,
-          result.correct,
-          result.total,
-          result.graveFaults,
-          result.passed ? 1 : 0,
-          quiz.jti,
-        );
+        await db.transaction(async (tx) => {
+          await tx.run(
+            `INSERT INTO theory_attempts (user_id, category, mode, theme, score, max_score, correct, total, grave_faults,
+               passed, quiz_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            req.user.id,
+            quiz.category,
+            quiz.mode,
+            quiz.theme,
+            result.score,
+            result.maxScore,
+            result.correct,
+            result.total,
+            result.graveFaults,
+            result.passed ? 1 : 0,
+            quiz.jti,
+          );
+          await recordLearning(tx, req.user.id, quiz.category, result.corrections);
+        });
       } catch (err) {
         if (/UNIQUE/i.test(String(err?.message))) throw new HttpError(409, 'Ce quiz a déjà été corrigé.');
         throw err;

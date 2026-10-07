@@ -2,22 +2,24 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../../api.js';
 import { useI18n } from '../../i18n.jsx';
+import { useAuth } from '../../auth.jsx';
 import { Chips, ErrorMessage } from '../../components/ui.jsx';
 
 const CATEGORIES = ['AM', 'A', 'B', 'C', 'D', 'G'];
-const HISTORY_KEY = (category) => `autoschub.coach.${category}`;
+// Historique propre à chaque compte : sur un appareil partagé, l'élève suivant ne le voit pas.
+const HISTORY_KEY = (userId, category) => `autoschub.coach.${userId}.${category}`;
 const MAX_HISTORY = 30;
 
-const loadHistory = (category) => {
+const loadHistory = (userId, category) => {
   try {
-    return JSON.parse(localStorage.getItem(HISTORY_KEY(category)) ?? '[]');
+    return JSON.parse(localStorage.getItem(HISTORY_KEY(userId, category)) ?? '[]');
   } catch {
     return [];
   }
 };
-const saveHistory = (category, messages) => {
+const saveHistory = (userId, category, messages) => {
   try {
-    localStorage.setItem(HISTORY_KEY(category), JSON.stringify(messages.slice(-MAX_HISTORY)));
+    localStorage.setItem(HISTORY_KEY(userId, category), JSON.stringify(messages.slice(-MAX_HISTORY)));
   } catch {
     // stockage indisponible : l'historique reste en mémoire
   }
@@ -56,11 +58,12 @@ function RichText({ text }) {
 
 export default function Coach() {
   const { t } = useI18n();
+  const { user } = useAuth();
   const [params, setParams] = useSearchParams();
   const [category, setCategory] = useState(() => (CATEGORIES.includes(params.get('category')) ? params.get('category') : 'B'));
   const [tab, setTab] = useState(params.get('tab') === 'plan' ? 'plan' : 'chat');
   const [status, setStatus] = useState(null);
-  const [messages, setMessages] = useState(() => loadHistory(category));
+  const [messages, setMessages] = useState(() => loadHistory(user.id, category));
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -75,8 +78,8 @@ export default function Coach() {
   }, []);
 
   useEffect(() => {
-    setMessages(loadHistory(category));
-  }, [category]);
+    setMessages(loadHistory(user.id, category));
+  }, [user.id, category]);
 
   useEffect(() => {
     if (tab !== 'plan') return;
@@ -92,7 +95,7 @@ export default function Coach() {
 
   const push = (next) => {
     setMessages(next);
-    saveHistory(category, next);
+    saveHistory(user.id, category, next);
   };
 
   const call = async (path, body, shown) => {
