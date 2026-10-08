@@ -1,4 +1,5 @@
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync, renameSync } from 'node:fs';
+import { blobSyncEnabled, createBlobSync, restoreDatabase } from './blobSync.js';
 import { DatabaseSync } from 'node:sqlite';
 import { dirname } from 'node:path';
 
@@ -248,9 +249,38 @@ function wrap(executor) {
 // en dev, dans les tests et sur Vercel (stockage éphémère dans /tmp) sans Turso.
 class LocalClient {
   constructor(path) {
+    this.path = path;
     this.sqlite = new DatabaseSync(path);
     this.sqlite.exec('PRAGMA foreign_keys = ON;');
     this.lock = Promise.resolve();
+  }
+
+  // Nombre de lignes modifiées depuis l'ouverture (pour savoir s'il faut sauvegarder la base).
+  totalChanges() {
+    return Number(this.sqlite.prepare('SELECT total_changes() AS n').get().n);
+  }
+
+  // Copie cohérente du fichier de la base (aucune écriture en cours).
+  async snapshot() {
+    const release = await this.acquire();
+    try {
+      return readFileSync(this.path);
+    } finally {
+      release();
+    }
+  }
+
+  // Remplace la base par une copie plus récente (téléchargée dans `file`).
+  async replaceWith(file) {
+    const release = await this.acquire();
+    try {
+      this.sqlite.close();
+      renameSync(file, this.path);
+      this.sqlite = new DatabaseSync(this.path);
+      this.sqlite.exec('PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
+    } finally {
+      release();
+    }
   }
 
   // Une seule connexion : chaque requête et chaque transaction y passe à tour de rôle.
@@ -335,6 +365,7 @@ export async function openDb(file = process.env.DB_FILE || 'data/autoschub.db') 
   const remote = Boolean(tursoUrl) && !tursoUrl.startsWith('file:');
   let client;
   let localPath = null;
+  let blobEtag;
   if (remote) {
     // Client Turso 100 % JavaScript (HTTP) : rien de natif à embarquer.
     const { createClient } = await import('@libsql/client/web');
@@ -342,6 +373,8 @@ export async function openDb(file = process.env.DB_FILE || 'data/autoschub.db') 
   } else {
     localPath = tursoUrl ? tursoUrl.slice('file:'.length) : file;
     if (localPath !== ':memory:') mkdirSync(dirname(localPath), { recursive: true });
+    // Sauvegarde dans Vercel Blob : on part de la dernière copie enregistrée.
+    if (localPath !== ':memory:' && blobSyncEnabled()) blobEtag = await restoreDatabase(localPath);
     client = new LocalClient(localPath);
   }
 
@@ -383,6 +416,10 @@ export async function openDb(file = process.env.DB_FILE || 'data/autoschub.db') 
     await db.exec(SCHEMA);
     await migrate(db);
     await db.setMeta('schema_version', SCHEMA_VERSION);
+  }
+  if (blobEtag !== undefined) {
+    db.sync = createBlobSync(db, localPath, blobEtag);
+    db.persistent = true;
   }
   return db;
 }

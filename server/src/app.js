@@ -42,7 +42,7 @@ export function createApp(db) {
     res.set('Cache-Control', 'no-store');
     res.json({
       ok: true,
-      database: db.isRemote ? 'turso' : 'locale',
+      database: db.isRemote ? 'turso' : db.persistent ? 'vercel-blob' : 'locale',
       authSecret: SECRET_SOURCE,
       region: process.env.VERCEL_REGION ?? null,
     });
@@ -54,7 +54,7 @@ export function createApp(db) {
       demo: demoEnabled() && process.env.DEMO_LOGIN !== '0',
       // Sur Vercel sans base Turso, chaque instance a sa propre base temporaire :
       // les comptes créés peuvent disparaître. L'app l'indique clairement.
-      persistent: db.isRemote || !process.env.VERCEL,
+      persistent: db.isRemote || Boolean(db.persistent) || !process.env.VERCEL,
       // Coach IA : réponses de Claude si ANTHROPIC_API_KEY est configurée, sinon coach hors ligne.
       coachAi: aiEnabled(),
     });

@@ -106,6 +106,12 @@ Les comptes de démo ont un mot de passe public : ils sont créés par défaut *
 `vercel.json` est fourni : le site compilé est copié dans `dist/` (dossier attendu par Vercel) et l’API Express tourne comme
 fonction serverless (`api/index.js`).
 
+**Sans compte externe : Vercel Blob.** Si le projet a un stockage *Blob* relié (Vercel → Storage → Create → Blob,
+connecté au projet : la variable `BLOB_READ_WRITE_TOKEN` est ajoutée automatiquement) et pas de `TURSO_DATABASE_URL`,
+la base SQLite est sauvegardée dans ce stockage : téléchargée au démarrage d’une instance, rechargée si une autre
+instance l’a modifiée, et renvoyée avant chaque réponse qui change des données (ETag : pas d’écrasement silencieux).
+Idéal pour démarrer ; pour un fort trafic, préférer Turso. `/api/health` indique alors `"database":"vercel-blob"`.
+
 Vercel lance plusieurs instances éphémères de l’API : les données doivent donc vivre dans une **base hébergée**,
 sinon packs, leçons et inscriptions disparaissent ou n’apparaissent que par moments. L’app utilise
 [Turso](https://turso.tech) (SQLite hébergé, offre gratuite) :

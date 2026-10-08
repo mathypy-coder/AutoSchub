@@ -24,6 +24,7 @@ try {
   fromServer.resolve('express');
   fromServer.resolve('@libsql/client/web');
   fromServer.resolve('@anthropic-ai/sdk');
+  fromServer.resolve('@vercel/blob');
 } catch {
   console.log('Installation des dépendances du serveur…');
   execSync('npm install --workspaces --include-workspace-root --no-audit --no-fund', { cwd: ROOT, stdio: 'inherit' });

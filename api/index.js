@@ -5,14 +5,43 @@ import { createApp } from '../server/src/app.js';
 import { openDb } from '../server/src/db.js';
 import { seedDemo } from '../server/src/seed.js';
 
-if (!process.env.TURSO_DATABASE_URL) {
-  console.warn('TURSO_DATABASE_URL non défini : données stockées dans /tmp, perdues entre les instances.');
+if (!process.env.TURSO_DATABASE_URL && !process.env.BLOB_READ_WRITE_TOKEN) {
+  console.warn('Ni Turso ni Vercel Blob : données stockées dans /tmp, perdues entre les instances.');
 }
 
 async function init() {
   const db = await openDb(process.env.DB_FILE || '/tmp/autoschub.db');
   await seedDemo(db);
-  return createApp(db);
+  await db.sync?.flush(); // première sauvegarde (schéma, comptes de démo)
+  return { app: createApp(db), db };
+}
+
+// Avec Vercel Blob : la base est renvoyée avant la réponse quand la requête l'a modifiée.
+// En cas de conflit avec une autre instance, la réponse devient « réessaie » (rien n'est perdu en silence).
+function syncBeforeResponse(res, sync) {
+  const end = res.end.bind(res);
+  res.end = (...args) => {
+    sync
+      .flush()
+      .then((result) => {
+        if (result === 'conflict' && !res.headersSent) {
+          res.statusCode = 409;
+          res.setHeader('Content-Type', 'application/json; charset=utf-8');
+          return end(JSON.stringify({ error: 'Le serveur était occupé, réessaie.' }));
+        }
+        return end(...args);
+      })
+      .catch((err) => {
+        console.error('Sauvegarde Vercel Blob impossible :', err);
+        if (!res.headersSent) {
+          res.statusCode = 503;
+          res.setHeader('Content-Type', 'application/json; charset=utf-8');
+          return end(JSON.stringify({ error: 'Service momentanément indisponible, réessaie dans quelques secondes.' }));
+        }
+        return end(...args);
+      });
+    return res;
+  };
 }
 
 // Initialisation une seule fois par instance, partagée entre les requêtes.
@@ -35,7 +64,9 @@ function restoreOriginalUrl(req) {
 // (qui peut contenir l'adresse de la base) : celui-ci reste dans les journaux du serveur.
 function describeInitError(err) {
   const message = String(err?.message ?? err);
-  if (!process.env.TURSO_DATABASE_URL) return 'Base locale indisponible.';
+  if (!process.env.TURSO_DATABASE_URL) {
+    return process.env.BLOB_READ_WRITE_TOKEN ? 'Stockage Vercel Blob injoignable (voir les journaux).' : 'Base locale indisponible.';
+  }
   if (/401|403|unauthori[sz]ed|forbidden|jwt|token/i.test(message)) {
     return 'Turso refuse la connexion : vérifie TURSO_AUTH_TOKEN.';
   }
@@ -52,7 +83,11 @@ export default async function handler(req, res) {
     throw err;
   });
   try {
-    const app = await ready;
+    const { app, db } = await ready;
+    if (db.sync) {
+      await db.sync.ensureFresh();
+      syncBeforeResponse(res, db.sync);
+    }
     return app(req, res);
   } catch (err) {
     console.error('Initialisation de l’API impossible :', err);

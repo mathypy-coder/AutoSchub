@@ -13,6 +13,8 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",
     "@libsql/client": "^0.18.0",
+    "@vercel/blob": "^2.8.1",
+    "@vercel/functions": "^3.9.11",
     "express": "^5.0.0"
   }
 }
