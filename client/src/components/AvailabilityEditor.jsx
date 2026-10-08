@@ -60,22 +60,30 @@ export default function AvailabilityEditor() {
     }
   };
 
+  const activeDays = DAYS.filter((d) => week[d]);
+  const weeklyHours =
+    activeDays.reduce((sum, d) => sum + Math.max(0, toMinutes(week[d].end) - toMinutes(week[d].start)), 0) / 60;
+  const firstActive = activeDays[0];
+  const copyToAll = () =>
+    setWeek((w) => Object.fromEntries(Object.keys(w).map((d) => [d, { ...w[firstActive] }])));
+
   return (
-    <div className="card">
-      <strong>{t('availability.title')}</strong>
-      <p className="muted small">
-        {t('availability.intro')}
-        {isDefault && t('availability.defaultNote')}
-      </p>
+    <div className="card ins-avail">
+      <div className="ins-avail-summary">
+        <strong>{t('availability.summary', { days: activeDays.length, hours: Math.round(weeklyHours * 10) / 10 })}</strong>
+        {isDefault && <small>{t('availability.defaultNote')}</small>}
+      </div>
       {DAYS.map((weekday) => {
         const label = t(`availability.day${weekday}`);
+        const on = Boolean(week[weekday]);
         return (
-          <div key={weekday} className="avail-row">
-            <label className="switch">
-              <input type="checkbox" checked={Boolean(week[weekday])} onChange={() => toggle(weekday)} />
-              {label}
+          <div key={weekday} className={`avail-row ins-avail-row ${on ? 'on' : ''}`}>
+            <label className="ins-toggle">
+              <input type="checkbox" checked={on} onChange={() => toggle(weekday)} />
+              <span className="ins-toggle-track" aria-hidden="true" />
+              <span className="ins-toggle-label">{label}</span>
             </label>
-            {week[weekday] ? (
+            {on ? (
               <span className="row">
                 <input
                   type="time"
@@ -84,7 +92,7 @@ export default function AvailabilityEditor() {
                   aria-label={t('availability.start', { day: label })}
                   onChange={(e) => setWeek({ ...week, [weekday]: { ...week[weekday], start: e.target.value } })}
                 />
-                <span>–</span>
+                <span aria-hidden="true">–</span>
                 <input
                   type="time"
                   step={1800}
@@ -99,9 +107,18 @@ export default function AvailabilityEditor() {
           </div>
         );
       })}
+      {activeDays.length > 1 && (
+        <button type="button" className="ins-text-btn" onClick={copyToAll}>
+          {t('availability.copyFirst', { day: t(`availability.day${firstActive}`) })}
+        </button>
+      )}
       <ErrorMessage error={error} />
-      {message && <p className="success">{message}</p>}
-      <button type="button" className="btn btn-primary" onClick={save}>
+      {message && (
+        <p className="success" role="status">
+          {message}
+        </p>
+      )}
+      <button type="button" className="btn btn-primary btn-block" onClick={save}>
         {t('availability.save')}
       </button>
     </div>
