@@ -1,6 +1,7 @@
 // Écran « Filière libre » : parcours, guide régional, parcours d'examen, carnet de bord.
 export default {
   fr: {
+    eyebrow: 'Permis B · avec un proche',
     title: 'Filière libre',
     intro: 'Apprends à conduire avec un proche (permis provisoire M36) : on te guide étape par étape jusqu’à l’examen pratique.',
     tab_journey: '🧭 Mon parcours',
@@ -76,6 +77,7 @@ export default {
     delete: 'Supprimer',
   },
   nl: {
+    eyebrow: 'Rijbewijs B · met een begeleider',
     title: 'Vrije begeleiding',
     intro: 'Leer rijden met iemand die je kent (voorlopig rijbewijs M36): we begeleiden je stap voor stap tot het praktijkexamen.',
     tab_journey: '🧭 Mijn traject',
@@ -151,6 +153,7 @@ export default {
     delete: 'Verwijderen',
   },
   en: {
+    eyebrow: 'Licence B · with a supervisor',
     title: 'Supervised driving',
     intro: 'Learn to drive with someone close to you (M36 provisional licence): we guide you step by step to the practical test.',
     tab_journey: '🧭 My journey',

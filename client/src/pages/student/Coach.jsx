@@ -3,7 +3,8 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../../api.js';
 import { useI18n } from '../../i18n.jsx';
 import { useAuth } from '../../auth.jsx';
-import { Chips, ErrorMessage } from '../../components/ui.jsx';
+import { Chips, ErrorMessage, PageHeader } from '../../components/ui.jsx';
+import '../../styles/pages.css';
 
 const CATEGORIES = ['AM', 'A', 'B', 'C', 'D', 'G'];
 // Historique propre à chaque compte : sur un appareil partagé, l'élève suivant ne le voit pas.
@@ -137,16 +138,20 @@ export default function Coach() {
   const quota = status?.quota;
 
   return (
-    <div className="page coach-page">
-      <div className="row-between">
-        <h1>{t('coach.title')}</h1>
-        {status && (
-          <span className={`badge ${status.ai ? 'badge-accepted' : 'badge-pending'}`} title={status.ai ? t('coach.aiOn') : t('coach.aiOff')}>
-            {status.ai ? t('coach.aiBadge') : t('coach.offlineBadge')}
-          </span>
-        )}
-      </div>
-      <p className="muted small">{t('coach.intro')}</p>
+    <div className="page coach-page pg">
+      <PageHeader
+        eyebrow={t('coach.eyebrow')}
+        title={t('coach.title')}
+        subtitle={t('coach.intro')}
+        action={
+          status && (
+            <span className={`badge ${status.ai ? 'badge-accepted' : 'badge-pending'}`} title={status.ai ? t('coach.aiOn') : t('coach.aiOff')}>
+              {status.ai ? t('coach.aiBadge') : t('coach.offlineBadge')}
+            </span>
+          )
+        }
+      />
+      <div className="pg-field-label">{t('coach.categoryLabel')}</div>
       <Chips options={CATEGORIES.map((c) => ({ value: c, label: c }))} value={category} onChange={setCategory} />
       <div className="chips" role="tablist">
         {['chat', 'plan'].map((id) => (

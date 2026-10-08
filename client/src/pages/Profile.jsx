@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { groupSkills, LevelBar } from '../components/SkillsSheet.jsx';
+import { SectionHead } from '../components/ui.jsx';
 import { LanguageSwitcher, useI18n, useT } from '../i18n.jsx';
+import '../styles/pages.css';
 
 export default function Profile() {
   const { t, locale } = useI18n();
@@ -23,68 +26,118 @@ export default function Profile() {
   const exams = attempts.filter((a) => a.mode === 'exam');
   const best = exams.reduce((max, a) => Math.max(max, a.score / a.maxScore), 0);
 
+  const showFree = user.goalCategory === 'B' || user.learningTrack === 'free';
+  const menu = [
+    { to: '/pack', icon: '🎟️', title: t('profile.menuPack'), text: t('profile.menuPackText') },
+    { to: '/centres', icon: '🏁', title: t('profile.menuCentres'), text: t('profile.menuCentresText') },
+    ...(showFree ? [{ to: '/libre', icon: '🧭', title: t('profile.menuFree'), text: t('profile.menuFreeText') }] : []),
+    { to: '/coach', icon: '🤖', title: t('profile.menuCoach'), text: t('profile.menuCoachText') },
+    { to: '/accueil', icon: '📈', title: t('profile.menuProgress'), text: t('profile.menuProgressText') },
+  ];
+  const goal = user.goalCategory
+    ? [t('profile.permit', { category: user.goalCategory }), user.learningTrack && t(`home.track_${user.learningTrack}`)]
+        .filter(Boolean)
+        .join(' · ')
+    : null;
+
   return (
-    <div className="page">
-      <div className="row">
-        <div className="avatar avatar-lg">{user.firstName[0]}</div>
-        <div>
-          <h1>
-            {user.firstName} {user.lastName}
-          </h1>
-          <p className="muted small">
-            {user.email}
-            {user.city && ` · ${user.city}`}
-          </p>
+    <div className="page pg">
+      <header className="card pg-profile">
+        <div className="pg-profile-row">
+          <div className="pg-profile-avatar" aria-hidden="true">
+            {(user.firstName?.[0] ?? '?').toUpperCase()}
+          </div>
+          <div className="grow pg-profile-id">
+            <h1>
+              {user.firstName} {user.lastName}
+            </h1>
+            <p className="small">
+              {user.email}
+              {user.city && ` · ${user.city}`}
+            </p>
+          </div>
         </div>
-      </div>
-
-      <h2 className="section-title">{t('profile.progress')}</h2>
-      <div className="stats">
-        <div className="stat">
-          <span className="stat-value">{completed.length}</span>
-          <span className="muted small">{t('profile.lessonsCompleted')}</span>
+        <div className="pg-goal">
+          <span aria-hidden="true">🎯</span>
+          <span className="grow">
+            <small>{t('profile.goalLabel')}</small>
+            <strong>{goal ?? t('profile.noGoal')}</strong>
+          </span>
+          <Link to="/bienvenue" className="pg-goal-edit">
+            {goal ? t('profile.editGoal') : t('profile.setGoal')}
+          </Link>
         </div>
-        <div className="stat">
-          <span className="stat-value">{exams.length ? new Intl.NumberFormat(locale, { style: 'percent' }).format(Math.round(best * 100) / 100) : '—'}</span>
-          <span className="muted small">{t('profile.bestMock')}</span>
-        </div>
-      </div>
+      </header>
 
-      <SkillsOverview
-        category={Object.entries(hoursByCategory).sort((x, y) => y[1] - x[1])[0]?.[0] ?? 'B'}
-      />
-
-      {Object.keys(hoursByCategory).length > 0 && (
-        <div className="card">
-          <strong>{t('profile.hoursByPermit')}</strong>
-          {Object.entries(hoursByCategory).map(([cat, hours]) => (
-            <div key={cat} className="row-between small">
-              <span>{t('profile.permit', { category: cat })}</span>
-              <span>{t('profile.hours', { hours: hours.toLocaleString(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) })}</span>
-            </div>
+      <section>
+        <SectionHead title={t('profile.spaceTitle')} subtitle={t('profile.spaceSub')} />
+        <nav className="pg-menu card" aria-label={t('profile.spaceTitle')}>
+          {menu.map((m) => (
+            <Link key={m.to} to={m.to} className="pg-menu-item">
+              <span className="pg-menu-icon" aria-hidden="true">{m.icon}</span>
+              <span className="grow">
+                <strong>{m.title}</strong>
+                <small>{m.text}</small>
+              </span>
+              <span className="pg-chevron" aria-hidden="true">›</span>
+            </Link>
           ))}
+        </nav>
+      </section>
+
+      <section>
+        <SectionHead title={t('profile.progress')} subtitle={t('profile.progressSub')} />
+        <div className="stats">
+          <div className="stat">
+            <span className="stat-value">{completed.length}</span>
+            <span className="muted small">{t('profile.lessonsCompleted')}</span>
+          </div>
+          <div className="stat">
+            <span className="stat-value">{exams.length ? new Intl.NumberFormat(locale, { style: 'percent' }).format(Math.round(best * 100) / 100) : '—'}</span>
+            <span className="muted small">{t('profile.bestMock')}</span>
+          </div>
         </div>
-      )}
 
-      <div className="card">
-        <strong>{t('profile.journeyTitle')}</strong>
-        <ol className="small steps">
-          <li>{t('profile.step1')}</li>
-          <li>{t('profile.step2')}</li>
-          <li>{t('profile.step3')}</li>
-          <li>{t('profile.step4')}</li>
-        </ol>
-        <p className="muted small">{t('profile.regionsNote')}</p>
-      </div>
+        <SkillsOverview
+          category={Object.entries(hoursByCategory).sort((x, y) => y[1] - x[1])[0]?.[0] ?? user.goalCategory ?? 'B'}
+        />
 
-      <div className="card">
-        <strong>{t('profile.language')}</strong>
-        <LanguageSwitcher />
-      </div>
+        {Object.keys(hoursByCategory).length > 0 && (
+          <div className="card">
+            <strong>{t('profile.hoursByPermit')}</strong>
+            {Object.entries(hoursByCategory).map(([cat, hours]) => (
+              <div key={cat} className="row-between small">
+                <span>{t('profile.permit', { category: cat })}</span>
+                <span>{t('profile.hours', { hours: hours.toLocaleString(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) })}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
 
-      <button type="button" className="btn btn-danger btn-block logout" onClick={logout}>
-        {t('profile.logout')}
-      </button>
+      <section>
+        <SectionHead title={t('profile.journeyTitle')} subtitle={t('profile.journeySub')} />
+        <div className="card">
+          <ol className="small steps">
+            <li>{t('profile.step1')}</li>
+            <li>{t('profile.step2')}</li>
+            <li>{t('profile.step3')}</li>
+            <li>{t('profile.step4')}</li>
+          </ol>
+          <p className="muted small">{t('profile.regionsNote')}</p>
+        </div>
+      </section>
+
+      <section>
+        <SectionHead title={t('profile.settingsTitle')} />
+        <div className="card">
+          <strong>{t('profile.language')}</strong>
+          <LanguageSwitcher />
+        </div>
+        <button type="button" className="btn btn-danger btn-block logout" onClick={logout}>
+          {t('profile.logout')}
+        </button>
+      </section>
     </div>
   );
 }

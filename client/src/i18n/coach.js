@@ -1,6 +1,8 @@
 // Écran « Coach IA » pour l'examen théorique.
 export default {
   fr: {
+    eyebrow: 'Révisions',
+    categoryLabel: 'Ton permis',
     title: 'Coach IA',
     intro: 'Pose tes questions sur le code de la route, fais-toi expliquer tes erreurs et suis ton plan de révision personnalisé.',
     aiBadge: '✨ IA',
@@ -28,6 +30,8 @@ export default {
     day: 'Jour {day}',
   },
   nl: {
+    eyebrow: 'Herhalen',
+    categoryLabel: 'Je rijbewijs',
     title: 'AI-coach',
     intro: 'Stel je vragen over de verkeersregels, laat je fouten uitleggen en volg je persoonlijke oefenplan.',
     aiBadge: '✨ AI',
@@ -55,6 +59,8 @@ export default {
     day: 'Dag {day}',
   },
   en: {
+    eyebrow: 'Revision',
+    categoryLabel: 'Your licence',
     title: 'AI coach',
     intro: 'Ask questions about the Highway Code, get your mistakes explained and follow your personal revision plan.',
     aiBadge: '✨ AI',

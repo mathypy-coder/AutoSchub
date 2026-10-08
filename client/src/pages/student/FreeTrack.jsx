@@ -2,7 +2,8 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../../api.js';
 import { getLocale, useT } from '../../i18n.jsx';
-import { Chips, ErrorMessage } from '../../components/ui.jsx';
+import { Chips, ErrorMessage, PageHeader } from '../../components/ui.jsx';
+import '../../styles/pages.css';
 
 // Carte chargée à la demande (Leaflet) : seulement dans l'onglet des parcours.
 const MapView = lazy(() => import('../../components/MapView.jsx'));
@@ -68,18 +69,23 @@ export default function FreeTrack() {
 
   if (!state || !rules) {
     return (
-      <div className="page">
+      <div className="page pg">
+        <PageHeader eyebrow={t('freeTrack.eyebrow')} title={t('freeTrack.title')} subtitle={t('freeTrack.intro')} />
         <ErrorMessage error={error} />
-        {!error && <p className="muted">{t('common.loading')}</p>}
+        {!error && (
+          <>
+            <div className="skeleton" style={{ minHeight: 44 }} />
+            <div className="skeleton" style={{ minHeight: 220 }} />
+          </>
+        )}
       </div>
     );
   }
 
   return (
-    <div className="page">
-      <h1>{t('freeTrack.title')}</h1>
-      <p className="muted small">{t('freeTrack.intro')}</p>
-      <div className="chips chips-scroll" role="tablist">
+    <div className="page pg">
+      <PageHeader eyebrow={t('freeTrack.eyebrow')} title={t('freeTrack.title')} subtitle={t('freeTrack.intro')} />
+      <div className="chips chips-scroll pg-tabs" role="tablist" aria-label={t('freeTrack.title')}>
         {TABS.map((id) => (
           <button
             key={id}

@@ -1,8 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, formatPrice } from '../../api.js';
-import { Chips, ErrorMessage } from '../../components/ui.jsx';
+import { useAuth } from '../../auth.jsx';
+import { ErrorMessage, PageHeader, SectionHead } from '../../components/ui.jsx';
 import { getLocale, translate, useT } from '../../i18n.jsx';
+import '../../styles/pages.css';
+
+// Formule recommandée selon la filière choisie à l'accueil guidé.
+const RECOMMENDED_BY_TRACK = { school: 'conduite', free: 'libre', theory: 'theorie' };
 
 const formatDate = (iso) =>
   new Intl.DateTimeFormat(getLocale(), { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(iso));
@@ -40,10 +45,24 @@ export default function Pack() {
     }
   };
 
-  if (!catalog || !state) return <div className="page">{error ? <ErrorMessage error={error} /> : t('common.loading')}</div>;
+  if (!catalog || !state) {
+    return (
+      <div className="page pg">
+        <PageHeader eyebrow={t('pack.eyebrow')} title={t('pack.title')} />
+        {error ? (
+          <ErrorMessage error={error} />
+        ) : (
+          <>
+            <div className="skeleton" style={{ minHeight: 220 }} />
+            <div className="skeleton" style={{ minHeight: 220 }} />
+          </>
+        )}
+      </div>
+    );
+  }
 
   return (
-    <div className="page">
+    <div className="page pg">
       <ErrorMessage error={error} />
       {state.subscription && state.subscription.status === 'active' ? (
         <ActivePack state={state} catalog={catalog} onCall={call} />
@@ -61,72 +80,130 @@ export default function Pack() {
 
 function PlanPicker({ catalog, permits, completed, onSubscribe }) {
   const t = useT();
-  const [category, setCategory] = useState('B');
+  const { user } = useAuth();
+  const recommendedId = RECOMMENDED_BY_TRACK[user?.learningTrack] ?? null;
+  const plans = recommendedId
+    ? [...catalog.plans].sort((a, b) => (b.id === recommendedId) - (a.id === recommendedId))
+    : catalog.plans;
+  const [planId, setPlanId] = useState(
+    () => (recommendedId && plans.some((p) => p.id === recommendedId) ? recommendedId : plans.find((p) => p.popular)?.id ?? plans[0]?.id),
+  );
+  const [category, setCategory] = useState(user?.goalCategory || 'B');
   const [busy, setBusy] = useState(false);
+  const selected = plans.find((p) => p.id === planId);
 
-  const subscribe = async (planId) => {
+  const subscribe = async () => {
+    if (!selected) return;
     setBusy(true);
-    await onSubscribe(planId, category);
+    await onSubscribe(selected.id, category);
     setBusy(false);
   };
 
   return (
     <>
+      <PageHeader eyebrow={t('pack.eyebrow')} title={t('pack.title')} subtitle={t('pack.intro')} />
       {completed && (
         <div className="card result-pass center">
           <strong>{t('pack.congratsTitle')}</strong>
           <span className="small">{t('pack.congratsText')}</span>
         </div>
       )}
-      <h1>{t('pack.title')}</h1>
-      <p className="muted">{t('pack.intro')}</p>
 
-      <div className="label">{t('pack.whichPermit')}</div>
-      <div className="chips chips-scroll">
-        {permits.map((p) => (
-          <button
-            key={p.code}
-            type="button"
-            className={`chip ${p.code === category ? 'chip-active' : ''}`}
-            onClick={() => setCategory(p.code)}
-          >
-            {p.code}
-          </button>
-        ))}
-      </div>
-      <p className="muted small">{t('pack.targetHours', { hours: catalog.targetHours[category], category })}</p>
+      <section>
+        <SectionHead
+          step={1}
+          done={!!selected}
+          title={t('pack.stepPlan')}
+          subtitle={recommendedId ? t('pack.stepPlanSubReco') : t('pack.stepPlanSub')}
+        />
+        <div className="pg-plans" role="radiogroup" aria-label={t('pack.stepPlan')}>
+          {plans.map((plan) => {
+            const isReco = plan.id === recommendedId;
+            const flag = isReco ? t('pack.recommended') : !recommendedId && plan.popular ? t('pack.popular') : null;
+            const isSelected = plan.id === planId;
+            return (
+              <button
+                key={plan.id}
+                type="button"
+                role="radio"
+                aria-checked={isSelected}
+                className={`pg-plan ${isSelected ? 'selected' : ''} ${isReco ? 'reco' : ''}`}
+                onClick={() => setPlanId(plan.id)}
+              >
+                {flag && <span className="pg-plan-flag">{flag}</span>}
+                <span className="pg-plan-head">
+                  <span className="grow">
+                    <strong className="pg-plan-name">{plan.name}</strong>
+                    <small className="muted">{plan.tagline}</small>
+                  </span>
+                  <span className="pg-radio" aria-hidden="true" />
+                </span>
+                <span className="pg-plan-price">
+                  <strong>{formatPrice(plan.priceMonthly)}</strong>
+                  <span className="muted small">{t('pack.perMonth')}</span>
+                </span>
+                <span className="pg-plan-hours">
+                  {plan.includedMinutes > 0
+                    ? t('pack.hoursIncluded', { hours: hoursLabel(plan.includedMinutes) })
+                    : t('pack.noHoursIncluded')}
+                </span>
+                <ul className="pg-plan-features">
+                  {plan.features.map((f) => (
+                    <li key={f}>
+                      <span className="pg-check" aria-hidden="true">✓</span>
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+              </button>
+            );
+          })}
+        </div>
+      </section>
 
-      <div className="plans">
-        {catalog.plans.map((plan) => (
-          <article key={plan.id} className={`card plan ${plan.popular ? 'plan-popular' : ''}`}>
-            {plan.popular && <span className="plan-flag">{t('pack.popular')}</span>}
-            <h2>{plan.name}</h2>
-            <p className="muted small">{plan.tagline}</p>
-            <div className="plan-price">
-              {formatPrice(plan.priceMonthly)}
-              <span className="muted small">{t('pack.perMonth')}</span>
-            </div>
-            <ul className="plan-features">
-              {plan.features.map((f) => (
-                <li key={f}>✓ {f}</li>
-              ))}
-            </ul>
+      <section>
+        <SectionHead
+          step={2}
+          title={t('pack.whichPermit')}
+          subtitle={t('pack.targetHours', { hours: catalog.targetHours[category], category })}
+        />
+        <div className="chips chips-scroll" role="group" aria-label={t('pack.whichPermit')}>
+          {permits.map((p) => (
             <button
+              key={p.code}
               type="button"
-              className={`btn ${plan.popular ? 'btn-primary' : 'btn-secondary'} btn-block`}
-              disabled={busy}
-              onClick={() => subscribe(plan.id)}
+              aria-pressed={p.code === category}
+              className={`chip ${p.code === category ? 'chip-active' : ''}`}
+              onClick={() => setCategory(p.code)}
             >
-              {t('pack.choose', { plan: plan.name, category })}
+              {p.code}
             </button>
-          </article>
-        ))}
-      </div>
-      <p className="muted small center">
-        {t('pack.withoutPack', { count: catalog.freeExamsPerWeek })}
-        <br />
-        {t('pack.demoPayment')}
-      </p>
+          ))}
+        </div>
+      </section>
+
+      <section>
+        <SectionHead step={3} title={t('pack.stepConfirm')} subtitle={t('pack.stepConfirmSub')} />
+        <p className="muted small center">
+          {t('pack.withoutPack', { count: catalog.freeExamsPerWeek })}
+          <br />
+          {t('pack.demoPayment')}
+        </p>
+      </section>
+
+      {selected && (
+        <div className="sticky-cta">
+          <span className="grow">
+            <strong>
+              {selected.name} · {t('pack.permitTitle', { category })}
+            </strong>
+            <small>{t('pack.pricePerMonth', { price: formatPrice(selected.priceMonthly) })} · {t('pack.noCommitment')}</small>
+          </span>
+          <button type="button" className="btn btn-primary" disabled={busy} onClick={subscribe}>
+            {t('pack.subscribe')}
+          </button>
+        </div>
+      )}
     </>
   );
 }
@@ -142,12 +219,13 @@ function ActivePack({ state, catalog, onCall }) {
 
   return (
     <>
+      <PageHeader eyebrow={t('pack.eyebrowActive')} title={t('pack.activeTitle')} subtitle={t('pack.activeSubtitle')} />
       <div className="card pack-hero">
         <div className="row-between">
           <span className="badge badge-in_progress">{t('pack.packBadge', { plan: sub.plan.name })}</span>
           <strong>{t('pack.pricePerMonth', { price: formatPrice(sub.plan.priceMonthly) })}</strong>
         </div>
-        <h1>{t('pack.permitTitle', { category: sub.category })}</h1>
+        <h2 className="pg-pack-permit">{t('pack.permitTitle', { category: sub.category })}</h2>
         {sub.includedMinutes > 0 && (
           <>
             <div className="row-between small">
@@ -201,7 +279,7 @@ function ActivePack({ state, catalog, onCall }) {
         </Link>
       )}
 
-      <h2 className="section-title">{t('pack.journeyTitle')}</h2>
+      <SectionHead title={t('pack.journeyTitle')} subtitle={t('pack.journeySub')} />
       <ol className="journey">
         {journey.steps.map((step) => (
           <li key={step.id} className={`journey-step ${step.done ? 'done' : ''} ${journey.nextStep?.id === step.id ? 'current' : ''}`}>
@@ -251,8 +329,7 @@ function ActivePack({ state, catalog, onCall }) {
         ))}
       </ol>
 
-      <h2 className="section-title">{t('pack.changePlan')}</h2>
-      <p className="muted small">{t('pack.changePlanHint', { date: formatDate(sub.currentPeriodEnd) })}</p>
+      <SectionHead title={t('pack.changePlan')} subtitle={t('pack.changePlanHint', { date: formatDate(sub.currentPeriodEnd) })} />
       <div className="row wrap">
         {otherPlans.map((p) => (
           <button

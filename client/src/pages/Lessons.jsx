@@ -1,14 +1,17 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { api, formatDateTime, formatPrice } from '../api.js';
+import { Link, useSearchParams } from 'react-router-dom';
+import { api, formatPrice } from '../api.js';
 import { downloadLessonIcs } from '../calendar.js';
 import MessageThread from '../components/MessageThread.jsx';
 import SkillsSheet from '../components/SkillsSheet.jsx';
 import { useAuth } from '../auth.jsx';
 import MapView from '../components/MapView.jsx';
-import { ErrorMessage, StatusBadge } from '../components/ui.jsx';
+import { EmptyState, ErrorMessage, PageHeader, SectionHead, StatusBadge } from '../components/ui.jsx';
 import { usePolling } from '../hooks.js';
-import { useT } from '../i18n.jsx';
+import { getLocale, useT } from '../i18n.jsx';
+import '../styles/pages.css';
+
+const fmt = (iso, opts) => new Intl.DateTimeFormat(getLocale(), opts).format(new Date(iso));
 
 const ACTIVE = ['pending', 'accepted', 'en_route', 'in_progress'];
 
@@ -39,30 +42,100 @@ const STUDENT_ACTIONS = {
 export default function Lessons() {
   const t = useT();
   const { user } = useAuth();
+  const [params, setParams] = useSearchParams();
   const { data, error, refresh } = usePolling('/bookings', 5000);
+  const isInstructor = user.role === 'instructor';
   const bookings = data?.bookings ?? [];
   const active = bookings.filter((b) => ACTIVE.includes(b.status)).sort((a, b) => a.startAt.localeCompare(b.startAt));
   const past = bookings.filter((b) => !ACTIVE.includes(b.status));
+  const booked = !isInstructor && params.get('booked') === '1';
+  const dismissBanner = () => {
+    const next = new URLSearchParams(params);
+    next.delete('booked');
+    setParams(next, { replace: true });
+  };
 
   return (
-    <div className="page">
-      <h1>{user.role === 'instructor' ? t('lessons.titleInstructor') : t('lessons.titleStudent')}</h1>
-      <ErrorMessage error={error} />
-      {data && !bookings.length && (
-        <p className="empty">
-          {user.role === 'instructor'
-            ? t('lessons.emptyInstructor')
-            : t('lessons.emptyStudent')}
-        </p>
+    <div className="page pg">
+      <PageHeader
+        eyebrow={isInstructor ? t('lessons.eyebrowInstructor') : t('lessons.eyebrowStudent')}
+        title={isInstructor ? t('lessons.titleInstructor') : t('lessons.titleStudent')}
+        subtitle={isInstructor ? t('lessons.subtitleInstructor') : t('lessons.subtitleStudent')}
+        action={
+          !isInstructor && bookings.length > 0 ? (
+            <Link to="/reserver" className="btn btn-primary pg-header-btn">
+              + {t('lessons.bookCta')}
+            </Link>
+          ) : null
+        }
+      />
+
+      {booked && (
+        <div className="pg-banner" role="status">
+          <span className="grow">
+            <strong>{t('lessons.bookedTitle')}</strong>
+            <small>{t('lessons.bookedText')}</small>
+          </span>
+          <button type="button" className="pg-banner-close" onClick={dismissBanner} aria-label={t('lessons.close')}>
+            ✕
+          </button>
+        </div>
       )}
-      {active.length > 0 && <h2 className="section-title">{t('lessons.upcoming')}</h2>}
-      {active.map((b) => (
-        <BookingCard key={b.id} booking={b} role={user.role} onChange={refresh} />
-      ))}
-      {past.length > 0 && <h2 className="section-title">{t('lessons.history')}</h2>}
-      {past.map((b) => (
-        <BookingCard key={b.id} booking={b} role={user.role} onChange={refresh} />
-      ))}
+
+      <ErrorMessage error={error} />
+
+      {!data && !error && (
+        <>
+          <div className="skeleton" style={{ minHeight: 140 }} />
+          <div className="skeleton" style={{ minHeight: 140 }} />
+        </>
+      )}
+
+      {data && !bookings.length && (
+        <EmptyState
+          icon={isInstructor ? '📭' : '🚗'}
+          title={isInstructor ? t('lessons.emptyInstructorTitle') : t('lessons.emptyStudentTitle')}
+          text={isInstructor ? t('lessons.emptyInstructor') : t('lessons.emptyStudent')}
+          action={
+            !isInstructor && (
+              <Link to="/reserver" className="btn btn-primary pg-empty-btn">
+                {t('lessons.emptyCta')}
+              </Link>
+            )
+          }
+        />
+      )}
+
+      {data && bookings.length > 0 && (
+        <section aria-label={t('lessons.upcoming')}>
+          <SectionHead
+            title={`${t('lessons.upcoming')} (${active.length})`}
+            subtitle={isInstructor ? t('lessons.upcomingSubInstructor') : t('lessons.upcomingSub')}
+          />
+          {active.length === 0 && (
+            <div className="pg-inline-empty">
+              <span>{isInstructor ? t('lessons.noUpcomingInstructor') : t('lessons.noUpcoming')}</span>
+              {!isInstructor && (
+                <Link to="/reserver" className="btn btn-secondary">
+                  {t('lessons.bookCta')}
+                </Link>
+              )}
+            </div>
+          )}
+          {active.map((b) => (
+            <BookingCard key={b.id} booking={b} role={user.role} onChange={refresh} />
+          ))}
+        </section>
+      )}
+
+      {past.length > 0 && (
+        <section aria-label={t('lessons.history')}>
+          <SectionHead title={`${t('lessons.history')} (${past.length})`} subtitle={isInstructor ? t('lessons.historySubInstructor') : t('lessons.historySub')} />
+          {past.map((b) => (
+            <BookingCard key={b.id} booking={b} role={user.role} onChange={refresh} />
+          ))}
+        </section>
+      )}
     </div>
   );
 }
@@ -91,31 +164,48 @@ function BookingCard({ booking: b, role, onChange }) {
   const showMap = ['accepted', 'en_route'].includes(b.status) && b.pickupLat != null;
 
   return (
-    <article className={`card booking booking-${b.status}`}>
-      <div className="row-between">
-        <StatusBadge status={b.status} />
-        <strong>{formatPrice(role === 'student' ? b.studentPrice : b.price)}</strong>
+    <article className={`card booking pg-lesson booking-${b.status}`}>
+      <div className="pg-lesson-head">
+        <div className="pg-date" aria-hidden="true">
+          <span>{fmt(b.startAt, { weekday: 'short' })}</span>
+          <strong>{fmt(b.startAt, { day: 'numeric' })}</strong>
+          <span>{fmt(b.startAt, { month: 'short' })}</span>
+        </div>
+        <div className="grow pg-lesson-main">
+          <div className="row-between pg-lesson-top">
+            <StatusBadge status={b.status} />
+            <strong className="pg-price">{formatPrice(role === 'student' ? b.studentPrice : b.price)}</strong>
+          </div>
+          <h3>{t('lessons.cardTitle', { category: b.category, min: b.durationMin })}</h3>
+          <p className="small pg-when">
+            {b.isInstant && t('lessons.instant')}
+            {fmt(b.startAt, { weekday: 'long', day: 'numeric', month: 'long' })} · {fmt(b.startAt, { hour: '2-digit', minute: '2-digit' })}
+          </p>
+        </div>
       </div>
-      <h3>
-        {t('lessons.cardTitle', { category: b.category, min: b.durationMin })}
-      </h3>
+
+      <div className="pg-person">
+        <span className="pg-avatar" aria-hidden="true">
+          {(other.firstName?.[0] ?? '?').toUpperCase()}
+        </span>
+        <span className="grow">
+          <small className="muted">{role === 'student' ? t('lessons.withInstructor') : t('lessons.withStudent')}</small>
+          <strong>
+            {other.firstName} {other.lastName}
+          </strong>
+          {role === 'student' && b.instructor.vehicle && <small className="muted">🚘 {b.instructor.vehicle}</small>}
+        </span>
+        {other.phone && (
+          <a className="pg-call" href={`tel:${other.phone.replace(/\s/g, '')}`} aria-label={t('lessons.call', { phone: other.phone })}>
+            📞
+          </a>
+        )}
+      </div>
+
+      <p className="small pg-where">📍 {b.pickupAddress}</p>
       {role === 'student' && b.coveredMinutes > 0 && (
         <p className="pack-note small">🎟️ {t('lessons.packCovered', { min: b.coveredMinutes })}</p>
       )}
-      <p className="small">
-        {b.isInstant ? t('lessons.instant') : '📅 '}
-        {formatDateTime(b.startAt)}
-        <br />📍 {b.pickupAddress}
-        <br />
-        {role === 'student' ? '🧑‍🏫' : '🎓'} {other.firstName} {other.lastName}
-        {other.phone && (
-          <>
-            {' · '}
-            <a href={`tel:${other.phone.replace(/\s/g, '')}`}>{other.phone}</a>
-          </>
-        )}
-        {role === 'student' && b.instructor.vehicle && <><br />🚘 {b.instructor.vehicle}</>}
-      </p>
 
       {role === 'student' && b.status === 'en_route' && b.instructor.etaMin != null && (
         <p className="eta">{t('lessons.eta', { min: b.instructor.etaMin })}</p>
@@ -136,7 +226,7 @@ function BookingCard({ booking: b, role, onChange }) {
       )}
 
       {actions.length > 0 && (
-        <div className="row wrap">
+        <div className="row wrap pg-actions">
           {actions.map((a) => (
             <button
               key={a.status}

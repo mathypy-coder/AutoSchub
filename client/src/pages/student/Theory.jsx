@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, formatDateTime } from '../../api.js';
-import { Chips, ErrorMessage } from '../../components/ui.jsx';
+import { Chips, EmptyState, ErrorMessage, PageHeader, SectionHead } from '../../components/ui.jsx';
 import { useT } from '../../i18n.jsx';
+import '../../styles/pages.css';
 
 export default function Theory() {
   const t = useT();
@@ -87,68 +88,103 @@ export default function Theory() {
   const current = meta?.categories.find((c) => c.code === category);
 
   return (
-    <div className="page">
-      <h1>{t('theory.title')}</h1>
-      <p className="muted">{t('theory.intro')}</p>
+    <div className="page pg">
+      <PageHeader eyebrow={t('theory.eyebrow')} title={t('theory.title')} subtitle={t('theory.intro')} />
       <ErrorMessage error={error} />
+      {!meta && !error && (
+        <>
+          <div className="skeleton" style={{ minHeight: 44 }} />
+          <div className="skeleton" style={{ minHeight: 160 }} />
+          <div className="skeleton" style={{ minHeight: 140 }} />
+        </>
+      )}
       {meta && (
         <>
-          <Chips
-            options={meta.categories.map((c) => ({ value: c.code, label: c.label }))}
-            value={category}
-            onChange={setCategory}
-          />
+          <div className="pg-field-label" id="theory-cat">{t('theory.categoryLabel')}</div>
+          <div aria-labelledby="theory-cat">
+            <Chips
+              options={meta.categories.map((c) => ({ value: c.code, label: c.label }))}
+              value={category}
+              onChange={setCategory}
+            />
+          </div>
 
-          {insights && <Insights insights={insights} onReview={() => start('review')} onTheme={(theme) => start('practice', theme)} />}
+          <section>
+            <SectionHead step={1} title={t('theory.s1Title')} subtitle={t('theory.s1Sub')} />
+            {insights && <Insights insights={insights} onReview={() => start('review')} onTheme={(theme) => start('practice', theme)} />}
+            <Link className="card card-link coach-card pg-coach" to={`/coach?category=${category}`}>
+              <span className="pg-coach-icon" aria-hidden="true">🤖</span>
+              <span className="grow">
+                <strong>{t('theory.coachTitle')}</strong>
+                <span className="small">{t('theory.coachText')}</span>
+              </span>
+              <span className="pg-chevron" aria-hidden="true">›</span>
+            </Link>
+          </section>
 
-          <Link className="card card-link coach-card" to={`/coach?category=${category}`}>
-            <strong>{t('theory.coachTitle')}</strong>
-            <span className="small">{t('theory.coachText')}</span>
-          </Link>
-
-          <div className="card exam-card">
-            <h2>{t('theory.mockExam')}</h2>
-            <p className="small">
-              {t('theory.examRules', {
-                count: Math.min(meta.rules.questionCount, current?.questionCount ?? 0),
-                minutes: meta.rules.durationMinutes,
-                penalty: meta.rules.gravePenalty,
-              })}
-            </p>
-            <button
-              type="button"
-              className="btn btn-primary btn-block"
-              disabled={freeExamsLeft === 0}
-              onClick={() => start('exam')}
-            >
-              {t('theory.startExam')}
-            </button>
-            {freeExamsLeft != null && (
-              <p className="small center">
-                {t('theory.freeExamsLeft', { count: freeExamsLeft })} ·{' '}
-                <Link to="/pack">{t('theory.unlimitedWithPack')}</Link>
+          <section>
+            <SectionHead step={2} title={t('theory.s2Title')} subtitle={t('theory.s2Sub')} />
+            <div className="card exam-card pg-exam">
+              <div className="pg-exam-facts">
+                <span>
+                  <strong>{Math.min(meta.rules.questionCount, current?.questionCount ?? 0)}</strong>
+                  <small>{t('theory.factQuestions')}</small>
+                </span>
+                <span>
+                  <strong>{meta.rules.durationMinutes}′</strong>
+                  <small>{t('theory.factMinutes')}</small>
+                </span>
+                <span>
+                  <strong>82 %</strong>
+                  <small>{t('theory.factPass')}</small>
+                </span>
+              </div>
+              <p className="small muted">
+                {t('theory.examRules', {
+                  count: Math.min(meta.rules.questionCount, current?.questionCount ?? 0),
+                  minutes: meta.rules.durationMinutes,
+                  penalty: meta.rules.gravePenalty,
+                })}
               </p>
-            )}
-          </div>
-
-          <h2 className="section-title">{t('theory.practiceByTheme')}</h2>
-          <div className="theme-grid">
-            <button type="button" className="theme" onClick={() => start('practice')}>
-              {t('theory.randomQuestions')}
-            </button>
-            {current?.themes.map((theme) => (
-              <button key={theme} type="button" className="theme" onClick={() => start('practice', theme)}>
-                {meta.themeLabels?.[theme] ?? theme}
+              <button
+                type="button"
+                className="btn btn-primary btn-block"
+                disabled={freeExamsLeft === 0}
+                onClick={() => start('exam')}
+              >
+                {t('theory.startExam')}
               </button>
-            ))}
-          </div>
+              {freeExamsLeft != null && (
+                <p className="small center">
+                  {t('theory.freeExamsLeft', { count: freeExamsLeft })} ·{' '}
+                  <Link to="/pack">{t('theory.unlimitedWithPack')}</Link>
+                </p>
+              )}
+            </div>
+          </section>
+
+          <section>
+            <SectionHead step={3} title={t('theory.s3Title')} subtitle={t('theory.s3Sub')} />
+            <div className="theme-grid">
+              <button type="button" className="theme" onClick={() => start('practice')}>
+                {t('theory.randomQuestions')}
+              </button>
+              {current?.themes.map((theme) => (
+                <button key={theme} type="button" className="theme" onClick={() => start('practice', theme)}>
+                  {meta.themeLabels?.[theme] ?? theme}
+                </button>
+              ))}
+            </div>
+          </section>
         </>
       )}
 
-      {history.length > 0 && (
-        <>
-          <h2 className="section-title">{t('theory.lastResults')}</h2>
-          <ul className="history">
+      <section>
+        <SectionHead title={t('theory.historyTitle')} subtitle={t('theory.historySub')} />
+        {history.length === 0 ? (
+          <EmptyState icon="📊" title={t('theory.historyEmptyTitle')} text={t('theory.historyEmptyText')} />
+        ) : (
+          <ul className="history card pg-history">
             {history.slice(0, 10).map((a) => (
               <li key={a.id} className="row-between">
                 <span className="small">
@@ -162,14 +198,14 @@ export default function Theory() {
                   <br />
                   <span className="muted">{formatDateTime(`${a.createdAt.replace(' ', 'T')}Z`)}</span>
                 </span>
-                <span className={a.passed ? 'pass' : 'fail'}>
+                <span className={`pg-score ${a.passed ? 'pass' : 'fail'}`}>
                   {a.score}/{a.maxScore}
                 </span>
               </li>
             ))}
           </ul>
-        </>
-      )}
+        )}
+      </section>
       <p className="muted small">{t('theory.disclaimer')}</p>
     </div>
   );

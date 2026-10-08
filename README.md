@@ -29,6 +29,12 @@ avec un module de **théorie** intégré.
 - **Agenda** : ajout d’une leçon au calendrier du téléphone (.ics avec rappel 1 h avant) ; « Réserver à nouveau ».
 - **Théorie adaptative** : les questions ratées reviennent en révision jusqu’à deux bonnes réponses d’affilée,
   réussite par thème et score de préparation (objectif 85 %).
+- **Parcours guidé (UX v2)** : après l’inscription, 3 questions (permis visé, façon d’apprendre — moniteur,
+  filière libre ou théorie d’abord —, Région) construisent la « route vers le permis ». L’accueil de l’élève
+  (`/accueil`) montre la prochaine étape à faire, la route en 6 étapes (objectif → théorie → permis provisoire →
+  conduite → examen pratique → permis), la progression théorie/conduite et des raccourcis. Réservation en 4 étapes
+  (permis, moniteur, créneau, lieu et confirmation) avec barre de récapitulatif ; écrans à sections numérotées et
+  sous-titres, états vides qui guident, mode sombre. Navigation en 5 onglets : Accueil, Réserver, Leçons, Théorie, Profil.
 - **Trois langues** : français, néerlandais et anglais (sélecteur FR · NL · EN sur l’accueil, la connexion et le profil,
   détection de la langue du téléphone). Interface, questions de théorie, permis, packs, compétences, parcours et
   messages d’erreur du serveur sont traduits (`client/src/i18n/*.js`, `server/src/data/i18n/{nl,en}.js`).
@@ -165,6 +171,7 @@ Couvre l’inscription/connexion, la recherche géographique, tout le cycle d’
 | GET | `/api/theory/categories`, `/api/theory/quiz`, POST `/api/theory/submit`, GET `/api/theory/history` | — |
 | GET | `/api/free-track/rules`, `/api/free-track/routes/:centerId` | — |
 | GET/PUT | `/api/free-track/me` · GET/POST `/api/free-track/roadbook` · DELETE `/api/free-track/roadbook/:id` | élève |
+| GET | `/api/home` · PATCH `/api/auth/me` (`goalCategory`, `learningTrack`) | élève |
 | GET | `/api/coach/status`, `/api/coach/plan?category` · POST `/api/coach/chat`, `/api/coach/explain` | connecté |
 
 Toutes les routes acceptent `?lang=fr|nl|en` (ou l’en-tête `Accept-Language`).
