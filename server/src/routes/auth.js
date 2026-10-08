@@ -2,6 +2,10 @@ import { Router } from 'express';
 import { createToken, hashPassword, requireAuth, verifyPassword } from '../auth.js';
 import { serializeUser } from '../serializers.js';
 import { HttpError } from '../errors.js';
+import { PERMIT_CODES } from '../data/permits.js';
+
+// school : leçons en auto-école · free : filière libre avec un guide · theory : théorie d'abord.
+export const LEARNING_TRACKS = ['school', 'free', 'theory'];
 import {
   optionalText,
   readCategories,
@@ -133,6 +137,28 @@ export function authRoutes(db) {
 
   router.get('/me', requireAuth(), async (req, res) => {
     res.json({ user: serializeUser(req.user) });
+  });
+
+  // Objectif de l'élève (accueil guidé) : permis visé et parcours d'apprentissage.
+  router.patch('/me', requireAuth('student'), async (req, res) => {
+    const { goalCategory, learningTrack } = req.body ?? {};
+    const updates = {};
+    if (goalCategory !== undefined) {
+      if (!PERMIT_CODES.includes(goalCategory)) throw new HttpError(400, 'Catégorie de permis invalide.');
+      updates.goal_category = goalCategory;
+    }
+    if (learningTrack !== undefined) {
+      if (!LEARNING_TRACKS.includes(learningTrack)) throw new HttpError(400, 'Parcours inconnu.');
+      updates.learning_track = learningTrack;
+    }
+    const columns = Object.keys(updates);
+    if (!columns.length) throw new HttpError(400, 'Rien à mettre à jour.');
+    await db.run(
+      `UPDATE users SET ${columns.map((c) => `${c} = ?`).join(', ')} WHERE id = ?`,
+      ...Object.values(updates),
+      req.user.id,
+    );
+    res.json({ user: serializeUser(await db.get('SELECT * FROM users WHERE id = ?', req.user.id)) });
   });
 
   return router;

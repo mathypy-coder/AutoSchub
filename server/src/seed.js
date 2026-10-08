@@ -131,6 +131,7 @@ export async function seedDemoPack(db) {
     const { lastInsertRowid: studentId } = await tx.run(
       INSERT_USER, 'student', 'Noah', 'Dubois', DEMO_PACK_EMAIL, hashPassword(DEMO_PASSWORD), '+32 470 00 00 02', 'Bruxelles',
     );
+    await tx.run(`UPDATE users SET goal_category = 'B', learning_track = 'school' WHERE id = ?`, studentId);
 
     // Abonnement souscrit il y a 45 jours : on est dans la 2e période mensuelle.
     const createdAt = daysFromNow(-45, 9);
@@ -194,6 +195,7 @@ export async function seedDemoFreeTrack(db) {
     const { lastInsertRowid: studentId } = await tx.run(
       INSERT_USER, 'student', 'Emma', 'Lambert', DEMO_FREE_TRACK_EMAIL, hashPassword(DEMO_PASSWORD), '+32 470 00 00 03', 'Wavre',
     );
+    await tx.run(`UPDATE users SET goal_category = 'B', learning_track = 'free' WHERE id = ?`, studentId);
     const provisional = daysFromNow(-122).slice(0, 10);
     const createdAt = daysFromNow(-20, 9);
     await tx.run(

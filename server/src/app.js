@@ -10,6 +10,7 @@ import { bookingRoutes } from './routes/bookings.js';
 import { coachRoutes } from './routes/coach.js';
 import { examCenterRoutes } from './routes/examCenters.js';
 import { freeTrackRoutes } from './routes/freeTrack.js';
+import { homeRoutes } from './routes/home.js';
 import { progressRoutes } from './routes/progress.js';
 import { demoEnabled } from './seed.js';
 import { aiEnabled } from './coach.js';
@@ -76,6 +77,7 @@ export function createApp(db) {
   app.use('/api/progress', progressRoutes(db));
   app.use('/api/free-track', freeTrackRoutes(db));
   app.use('/api/coach', coachRoutes(db));
+  app.use('/api/home', homeRoutes(db));
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Route inconnue.' }));
 
   // En production, le serveur sert aussi l'application web compilée.

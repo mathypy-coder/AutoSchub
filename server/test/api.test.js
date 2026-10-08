@@ -911,3 +911,28 @@ describe('démo filière libre', () => {
     assert.equal(pack.data.journey.freeTrack, true);
   });
 });
+
+describe('accueil guidé', () => {
+  test('objectif de l’élève puis route vers le permis', async () => {
+    const { data } = await api('/api/auth/register', {
+      method: 'POST',
+      body: { role: 'student', firstName: 'Zoé', lastName: 'Route', email: 'zoe.home@test.be', password: 'motdepasse' },
+    });
+    const token = data.token;
+    let home = await api('/api/home', { token });
+    assert.equal(home.data.currentStep, 'goal');
+    assert.equal(home.data.nextAction.id, 'onboarding');
+    assert.equal((await api('/api/auth/me', { method: 'PATCH', token, body: { goalCategory: 'ZZ' } })).status, 400);
+    const me = await api('/api/auth/me', { method: 'PATCH', token, body: { goalCategory: 'A2', learningTrack: 'school' } });
+    assert.equal(me.data.user.goalCategory, 'A2');
+    home = await api('/api/home', { token });
+    assert.equal(home.data.category, 'A2');
+    assert.equal(home.data.currentStep, 'theory');
+    assert.equal(home.data.nextAction.to, '/theorie');
+    assert.equal(home.data.steps.length, 6);
+    // Filière libre : la pratique se compte en km.
+    await api('/api/auth/me', { method: 'PATCH', token, body: { goalCategory: 'B', learningTrack: 'free' } });
+    home = await api('/api/home', { token });
+    assert.equal(home.data.steps.find((s) => s.id === 'practice').kind, 'km');
+  });
+});

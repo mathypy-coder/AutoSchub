@@ -24,6 +24,8 @@ export function serializeUser(user) {
     email: user.email,
     phone: user.phone,
     city: user.city,
+    goalCategory: user.goal_category ?? null,
+    learningTrack: user.learning_track ?? null,
   };
 }
 

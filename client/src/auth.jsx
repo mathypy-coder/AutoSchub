@@ -64,6 +64,12 @@ export function AuthProvider({ children }) {
     notice: notice ? t(notice) : '',
     login: (email, password) => authenticate('/auth/login', { email, password }),
     register: (payload) => authenticate('/auth/register', payload),
+    // Objectif de l'élève (permis visé, parcours) choisi à l'accueil guidé.
+    updateMe: async (body) => {
+      const { user: me } = await api('/auth/me', { method: 'PATCH', body });
+      setUser(me);
+      return me;
+    },
     logout: () => {
       setToken(null);
       setUser(null);

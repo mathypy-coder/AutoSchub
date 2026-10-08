@@ -189,10 +189,15 @@ CREATE TABLE IF NOT EXISTS app_meta (
 `;
 
 // À incrémenter à chaque changement de SCHEMA ou d'ADDED_COLUMNS.
-export const SCHEMA_VERSION = '7';
+export const SCHEMA_VERSION = '8';
 
 // Colonnes ajoutées après la première version : migration des bases existantes.
 const ADDED_COLUMNS = {
+  // Objectif de l'élève choisi à l'accueil : catégorie de permis et parcours (auto-école, filière libre, théorie seule).
+  users: {
+    goal_category: 'TEXT',
+    learning_track: 'TEXT',
+  },
   bookings: {
     student_price_cents: 'INTEGER',
     covered_minutes: 'INTEGER NOT NULL DEFAULT 0',
