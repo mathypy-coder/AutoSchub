@@ -1,5 +1,14 @@
 # AutoSchub — le Uber de l’auto-école en Belgique
 
+> **Projet** — équipe, vision, roadmap, commercial, partenaires, juridique et présentation :
+> voir le dossier [`docs/`](docs/README.md).
+>
+> | | Rôle |
+> | --- | --- |
+> | Pierre-Yves Mathy | Commercial & business |
+> | Barthélemy Destrée | Technique & gestion de projet |
+> | Guillaume de Mévius | Réseau & relations institutionnelles |
+
 Application mobile-first (PWA) qui met en relation **élèves** et **moniteurs agréés** pour tous les permis motorisés belges,
 avec un module de **théorie** intégré.
 

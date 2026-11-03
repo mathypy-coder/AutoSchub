@@ -3,3 +3,4 @@ server/test
 server/data
 *.db
 *.db-*
+docs/
