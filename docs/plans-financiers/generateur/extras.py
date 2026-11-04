@@ -134,24 +134,24 @@ def finish_app(wb, H, out):
     ws = wb['Lisez-moi']
     key = ''
     if snap:
-        c = snap['c']
-        g = snap['g2']
-        gb = snap['g2b']
-        key = (f"Scénario central, grille actuelle de l’app : CA de {n(c['ca'][0])} € (an 1) à {n(c['ca'][4])} € (an 5) ; "
-               f"EBITDA an 5 : {n(c['ebitda'][4])} € ; besoin de financement maximal : {n(c['need'])} € ; premier mois d’EBITDA positif : {c['be']}.\n"
-               f"Avec la grille recommandée : EBITDA an 5 : {n(g['ebitda'][4])} € ; besoin : {n(g['need'])} € ; premier mois d’EBITDA positif : {g['be']}.\n"
-               f"Avec la grille recommandée + abonnements écoles partenaires : EBITDA an 5 : {n(gb['ebitda'][4])} € ; besoin : {n(gb['need'])} € ; premier mois d’EBITDA positif : {gb['be']}.\n"
-               f"Plan d’action complet (+ commission portée à 25 %) : EBITDA an 5 : {n(snap['act']['ebitda'][4])} € ; besoin : {n(snap['act']['need'])} € ; premier mois d’EBITDA positif : {snap['act']['be']}.\n"
-               f"Scénario prudent (grille actuelle) : besoin {n(snap['p']['need'])} € ; scénario ambitieux : besoin {n(snap['o']['need'])} €, premier mois d’EBITDA positif : {snap['o']['be']}.")
+        c, lg, bb, g = snap['c'], snap['leg'], snap['b2b'], snap['g2']
+        key = (f"Scénario central (prix alignés sur les auto-écoles, packs revalorisés, heures obligatoires après échec) : CA de {n(c['ca'][0])} € (an 1) à {n(c['ca'][4])} € (an 5) ; "
+               f"EBITDA an 5 : {n(c['ebitda'][4])} € ; résultat net an 5 : {n(c['net'][4])} € ; besoin de financement maximal : {n(c['need'])} € ; EBITDA durablement positif dès {c['be']}.\n"
+               f"Pour comparaison, avec les anciens paramètres de l’app (58 €/h, packs 9,99 / 149 / 279 €, sans heures obligatoires) : EBITDA an 5 : {n(lg['ebitda'][4])} € ; besoin : {n(lg['need'])} € ; EBITDA positif : {lg['be']}.\n"
+               f"Central + abonnements des écoles partenaires : EBITDA an 5 : {n(bb['ebitda'][4])} €. Central avec la grille « pack scindé » : EBITDA an 5 : {n(g['ebitda'][4])} €.\n"
+               f"Scénario prudent : EBITDA an 5 : {n(snap['p']['ebitda'][4])} €, besoin {n(snap['p']['need'])} € (la 2e levée de ≈ 700 000 € prévue dans « Hypothèses » est alors indispensable) ; "
+               f"scénario ambitieux : EBITDA an 5 : {n(snap['o']['ebitda'][4])} €, EBITDA positif dès {snap['o']['be']}.")
     blocks = [
         ('p', 'Plan financier prévisionnel sur 5 ans (60 mois, janvier 2027 – décembre 2031) de la plateforme AutoSchub — « le Uber de l’auto-école » — '
               'pour la Wallonie et la Région de Bruxelles-Capitale. Toutes les valeurs sont calculées par formules à partir de l’onglet « Hypothèses » : '
               'modifier une cellule bleue met tout le plan à jour.'),
         ('h', '1. L’activité'),
         ('p', 'Application mobile (PWA) qui met en relation des élèves et des moniteurs pour les permis motorisés belges (focalisation financière sur le permis B). '
-              'Revenus : (1) commission de 20 % sur les leçons réservées ; (2) packs mensuels Théorie 9,99 €, Conduite 149 € (3 h incluses, -10 % sur les heures sup.) et '
-              'Intégral 279 € (6 h incluses, -15 %) ; (3) marge sur les heures supplémentaires des abonnés ; (4) en option, abonnement des écoles partenaires. '
-              'Le moniteur est toujours payé au prix plein de la leçon, déduction faite de la commission.'),
+              'Le groupe possède sa propre école de conduite agréée (plan 2), partenaire de l’app. Prix des leçons alignés sur les auto-écoles actuelles : 75 €/h TTC. '
+              'Revenus : (1) commission de 20 % sur les leçons réservées ; (2) packs mensuels revalorisés — Théorie 14,99 €, Conduite 219 € (3 h incluses, -10 % sur les heures sup.), '
+              'Intégral 429 € (6 h incluses, -15 %) ; (3) marge sur les heures supplémentaires des abonnés ; (4) commission sur les heures obligatoires après échec '
+              '(6 h pratiques après 2 échecs à l’examen pratique, 12 h de théorie après 2 échecs théoriques) données dans l’auto-école du groupe ; (5) en option, '
+              'abonnement des écoles partenaires. Le moniteur est toujours payé au prix plein de la leçon, déduction faite de la commission.'),
         ('h', '2. Résultats clés'),
         ('p', key or 'Voir l’onglet « Synthèse ».'),
         ('h', '3. Constats importants (à traiter avant le lancement)'),
@@ -161,17 +161,22 @@ def finish_app(wb, H, out):
               'existent (arrêt du Conseil d’État de 2014, Superprof, Pwiic…) mais ne délivrent pas d’attestation : ils servent surtout la filière libre et le perfectionnement. '
               'Recommandation : un double canal dans l’app — écoles agréées partenaires (dont l’auto-école du plan 2) pour les heures officielles, moniteurs indépendants '
               'brevetés pour la filière libre — avec un affichage clair, et un avis écrit du SPW Mobilité et de Bruxelles Mobilité avant le lancement.'),
-        ('b', 'b) TVA et marge des packs'),
-        ('p', 'Avec la grille actuelle, AutoSchub vend les heures en son propre nom : la TVA de 21 % porte sur tout le prix du pack et l’élève paie l’heure incluse '
-              '49,67 € (Conduite) ou 46,50 € (Intégral), soit moins que le tarif à la carte (58 €). La contribution par abonné-mois est faible (≈ 17 € et ≈ 19 €) et devient '
-              'négative si l’élève consomme toutes ses heures (≈ -1 € et ≈ -18 €). Grille recommandée (onglet « Unit economics ») : un abonnement de service soumis à TVA '
-              '(19,99 € / 29,99 €) + des crédits d’heures vendus au nom et pour compte des moniteurs (réduction de 10 % / 15 % conservée) : seule la marge est soumise à TVA. '
-              'À valider par un fiscaliste (statut d’intermédiaire transparent, art. 13 et 20 CTVA).'),
-        ('b', 'c) Le modèle a besoin de volume'),
-        ('p', 'Une commission de 20 % prélevée sur un prix TTC laisse ≈ 9,6 € HTVA par heure. Avec une équipe resserrée (2 fondateurs + 6 salariés en an 5), '
-              'l’équilibre demande de l’ordre de 85 000 à 100 000 heures réservées par an, soit 15 à 18 % des candidats wallons et bruxellois. Leviers : grille recommandée, '
-              'abonnement des écoles partenaires, partenariats Forem / Actiris / mutualités (chèques permis), extension aux catégories A, C et D, puis à la Flandre.'),
-        ('b', 'd) Autres points'),
+        ('b', 'b) Heures obligatoires après échec : un segment captif'),
+        ('p', 'Chaque année, ≈ 12 500 candidats wallons et bruxellois échouent deux fois à l’examen pratique (probabilité (1 − 54 %)² en Wallonie, (1 − 51 %)² à Bruxelles) '
+              'et doivent suivre 6 h dans une école agréée ; ≈ 30 000 échouent deux fois au théorique (12 h de cours, obligation confirmée à Bruxelles, à vérifier en Wallonie). '
+              'L’app les détecte (résultat d’examen saisi dans le parcours), propose immédiatement les heures dans l’auto-école du groupe et prend 20 % de commission. '
+              'Captation retenue : 2 % → 12 % (pratique) et 1 % → 7 % (théorie) ; 2 h supplémentaires par candidat. Au-delà de la capacité de l’école du groupe, '
+              'les heures sont confiées aux écoles partenaires.'),
+        ('b', 'c) Prix et marge des packs'),
+        ('p', 'Les anciens prix (149 € et 279 €) faisaient payer l’heure incluse 49,67 € et 46,50 €, bien sous le prix du marché : la marge devenait négative dès que '
+              'l’élève consommait toutes ses heures. Avec la grille 2027 (219 € et 429 €), l’heure incluse revient à 73 € et 71,50 €, juste sous le prix auto-école (75 €) ; '
+              'la contribution passe à ≈ 43 € (Conduite) et ≈ 79 € (Intégral) par abonné-mois, et reste positive même si toutes les heures sont consommées (≈ 20 € et ≈ 32 €). '
+              'La grille « pack scindé » (abonnement de service + crédits vendus pour compte des moniteurs) reste une option fiscale, moins rentable à ces prix.'),
+        ('b', 'd) Volume et capacité'),
+        ('p', 'À 75 €/h, la commission de 20 % laisse ≈ 12,40 € HTVA par heure (contre 9,60 € à 58 €/h). Le volume reste le moteur : ≈ 83 000 heures en an 5 dans le scénario '
+              'central, soit ≈ 150 moniteurs actifs. L’auto-école du groupe ne peut en absorber qu’une partie : le réseau d’écoles partenaires est indispensable. '
+              'Leviers supplémentaires : abonnement des écoles partenaires, partenariats Forem / Actiris / mutualités, catégories A, C et D, puis la Flandre.'),
+        ('b', 'e) Autres points'),
         ('p', 'Paiement aujourd’hui simulé → intégrer Mollie (Bancontact pour le premier paiement, prélèvement SEPA pour les renouvellements). '
               'RGPD : géolocalisation en temps réel et élèves de 17 ans → analyse d’impact (AIPD) et DPO. Statut des moniteurs : indépendants (contrat-cadre, assurance '
               'auto-école à vérifier à chaque inscription, contrôle du brevet et de l’extrait 596.1). Fonds propres : prévoir les levées avant que les capitaux propres '
@@ -191,7 +196,7 @@ def finish_app(wb, H, out):
               '(expert-comptable certifié ITAA recommandé). Le plan est remis au notaire ; en cas de faillite dans les 3 ans, il peut servir à apprécier la responsabilité '
               'des fondateurs pour capitaux propres manifestement insuffisants : d’où le choix d’hypothèses prudentes.'),
         ('h', '7. Mode d’emploi'),
-        ('p', 'Changer de scénario : Hypothèses › « Scénario actif » (1, 2 ou 3). Tester la grille recommandée : « Grille tarifaire » = 2. Activer l’offre écoles : '
+        ('p', 'Changer de scénario : Hypothèses › « Scénario actif » (1, 2 ou 3). Tester le pack scindé : « Grille tarifaire » = 2. Régler la captation des heures obligatoires : section 5 bis. Activer l’offre écoles : '
               'ligne « Écoles de conduite partenaires abonnées ». Le contrôle du bilan (Synthèse, dernière ligne) doit toujours afficher 0.'),
         ('h', '8. Limites'),
         ('s', 'Les créances clients et dettes fournisseurs sont supposées nulles (paiement immédiat) ; les encaissements reversés aux moniteurs (leçons à la carte, crédits '
@@ -202,10 +207,10 @@ def finish_app(wb, H, out):
     write_text(ws, 'AutoSchub — plan financier de l’application (Wallonie & Bruxelles)', blocks)
     sources_sheet(wb, APP_SOURCES)
     if snap:
-        scen_sheet(wb, snap, [('p', 'Scénario prudent — grille actuelle'), ('c', 'Scénario central — grille actuelle (référence)'),
-                              ('o', 'Scénario ambitieux — grille actuelle'), ('g2', 'Scénario central — grille recommandée'),
-                              ('g2b', 'Scénario central — grille recommandée + abonnements écoles partenaires (15 → 70 écoles)'),
-                              ('act', 'Scénario central — plan d’action complet : grille recommandée + écoles partenaires + commission 25 %')],
+        scen_sheet(wb, snap, [('p', 'Scénario prudent'), ('c', 'Scénario central (référence) — 75 €/h, packs 14,99 / 219 / 429 €, heures obligatoires'),
+                              ('o', 'Scénario ambitieux'), ('b2b', 'Scénario central + abonnements écoles partenaires (15 → 70 écoles)'),
+                              ('g2', 'Scénario central — grille « pack scindé »'),
+                              ('leg', 'Pour comparaison : anciens paramètres de l’app (58 €/h, packs 9,99 / 149 / 279 €, sans heures obligatoires)')],
                    METRICS, 'Résultats recalculés pour chaque jeu d’hypothèses puis figés (le classeur ne recalcule qu’un scénario à la fois : '
                             'changer « Scénario actif » et « Grille tarifaire » dans Hypothèses pour explorer).')
 

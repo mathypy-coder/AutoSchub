@@ -11,6 +11,9 @@ SCEN = int(sys.argv[2]) if len(sys.argv) > 2 else 2
 GRID = int(sys.argv[3]) if len(sys.argv) > 3 else 1
 B2B = [0, 15, 35, 55, 70] if (len(sys.argv) > 4 and sys.argv[4] == '1') else [0, 0, 0, 0, 0]
 COMM = float(sys.argv[5]) if len(sys.argv) > 5 else 0.20
+LEG = len(sys.argv) > 6 and sys.argv[6] == '1'
+RATE, PTH, PCO, PIN = (58, 9.99, 149, 279) if LEG else (75, 14.99, 219, 429)
+CAPOP, CAPOT = ([0] * 5, [0] * 5) if LEG else ([0.02, 0.05, 0.08, 0.10, 0.12], [0.01, 0.03, 0.05, 0.06, 0.07])
 
 wb = Workbook()
 wb.remove(wb.active)
@@ -29,8 +32,8 @@ H.add('start', 'Date de démarrage du plan (mois 1)', datetime.date(2027, 1, 1),
       'Lancement commercial visé : janvier 2027 (constitution de la SRL en décembre 2026).', 'mmm-yy')
 H.add('scenario', 'Scénario actif (1 = prudent, 2 = central, 3 = ambitieux)', SCEN, 'choix',
       'Pilote les multiplicateurs de la section 4.', '0', key_flag=True)
-H.add('grid', 'Grille tarifaire des packs (1 = actuelle de l’app, 2 = recommandée)', GRID, 'choix',
-      '1 = prix codés dans server/src/data/plans.js ; 2 = pack scindé (abonnement de service + crédits d’heures vendus au nom des moniteurs). Voir onglet « Unit economics ».',
+H.add('grid', 'Grille tarifaire des packs (1 = grille 2027 alignée sur les auto-écoles, 2 = pack scindé recommandé)', GRID, 'choix',
+      '1 = packs revalorisés (14,99 / 219 / 429 €), vendus au nom d’AutoSchub ; 2 = pack scindé (abonnement de service + crédits d’heures vendus au nom des moniteurs). Voir onglet « Unit economics ».',
       '0', key_flag=True)
 H.add('tva', 'Taux de TVA normal', 0.21, '%', 'Code TVA belge, taux normal 21 %.', PCT)
 
@@ -91,8 +94,8 @@ H.scen('scen_cac', 'Multiplicateur du coût d’acquisition (CAC)', [1.3, 1.0, 0
 
 # ------------------------------------------------------------------ PRIX
 H.section('5. Prix, commission et paiements (paramètres de l’application)')
-H.add('rate', 'Tarif horaire moyen d’un moniteur (prix payé par l’élève, TTC)', 58, '€/h',
-      'Moyenne des 10 moniteurs du seed (50 à 70 €/h, moyenne 58,3 €). Marché : 50-75 €/h (Infor Jeunes), médiane ~70 €/h en auto-école (toutpourmonpermis.be).',
+H.add('rate', 'Tarif horaire moyen d’une leçon (prix payé par l’élève, TTC)', RATE, '€/h',
+      'Aligné sur les auto-écoles agréées actuelles : forfait 20 h médian ≈ 1 647 € en Wallonie (≈ 75-80 €/h), heure sup. médiane ≈ 70 €, à la carte ≈ 81 € (toutpourmonpermis.be, monautoecole.be). Même prix que l’auto-école du groupe (plan 2). Ancien seed : 58 €.',
       EUR2, key_flag=True)
 H.add('rate_idx', 'Indexation annuelle du tarif horaire', 0.025, '%/an', 'Inflation services + hausse carburant 2026.', PCT)
 H.add('comm', 'Commission plateforme sur les leçons', COMM, '%', 'COMMISSION_RATE = 0.2 (server/src/routes/instructors.js).', PCT, key_flag=True)
@@ -101,9 +104,9 @@ H.add('assuj', 'Part des moniteurs assujettis à la TVA (prix TTC)', 0.70, '%',
 H.calc('cost_factor', 'Facteur de coût HTVA d’1 € versé aux moniteurs', '1-<assuj>*(1-1/(1+<tva>))', 'x',
        'Calcul : part non récupérable de ce qui est versé aux moniteurs.', NUM2)
 H.add('p_idx', 'Indexation annuelle des prix des packs', 0.02, '%/an', 'Hypothèse (à partir de l’an 2).', PCT)
-H.add('p_th', 'Pack Théorie — prix mensuel TTC', 9.99, '€/mois', 'plans.js : priceMonthly 9.99.', EUR2)
-H.add('p_co', 'Pack Conduite — prix mensuel TTC (grille actuelle)', 149, '€/mois', 'plans.js : priceMonthly 149.', EUR2)
-H.add('p_in', 'Pack Intégral — prix mensuel TTC (grille actuelle)', 279, '€/mois', 'plans.js : priceMonthly 279.', EUR2)
+H.add('p_th', 'Pack Théorie — prix mensuel TTC', PTH, '€/mois', 'Revalorisé (app actuelle : 9,99 €). Reste sous les applis de théorie payantes (≈ 15-30 €).', EUR2, key_flag=True)
+H.add('p_co', 'Pack Conduite — prix mensuel TTC (grille 2027)', PCO, '€/mois', 'Revalorisé (app actuelle : 149 €) : 3 h ≈ 73 €/h, juste sous le prix auto-école (75 €/h), + suivi et théorie illimitée.', EUR2, key_flag=True)
+H.add('p_in', 'Pack Intégral — prix mensuel TTC (grille 2027)', PIN, '€/mois', 'Revalorisé (app actuelle : 279 €) : 6 h ≈ 71,5 €/h + moniteur référent.', EUR2, key_flag=True)
 H.add('min_co', 'Minutes de conduite incluses — Conduite', 180, 'min', 'plans.js : includedMinutes 180.', NUM)
 H.add('min_in', 'Minutes de conduite incluses — Intégral', 360, 'min', 'plans.js : includedMinutes 360.', NUM)
 H.add('d_co', 'Réduction heures supplémentaires — Conduite', 0.10, '%', 'plans.js : discount 0.1.', PCT)
@@ -121,6 +124,25 @@ H.add('fee_pct', 'Frais de paiement — part variable', 0.014, '%',
 H.add('fee_fix', 'Frais de paiement — part fixe par transaction', 0.25, '€', 'Idem.', EUR2)
 
 # ------------------------------------------------------------------ OFFRE MONITEURS
+H.section('5 bis. Heures obligatoires après échec (données par l’auto-école du groupe et les écoles partenaires)')
+H.note('Après 2 échecs à l’examen pratique : 6 h de cours obligatoires en école agréée ; après 2 échecs à l’examen théorique : 12 h de cours théoriques.')
+H.calc('w_pr_pass', 'Réussites à l’examen pratique / an — Wallonie', '<w_pr>*<w_pr_rate>', 'candidats', 'Calcul (2025) : 87 162 × 54 %. Chaque candidat finit par réussir (hypothèse).', NUM)
+H.calc('b_pr_pass', 'Réussites à l’examen pratique / an — Bruxelles', '<b_pr>*<b_pr_rate>', 'candidats', 'Calcul (2024) : 21 000 × 51 %.', NUM)
+H.calc('oblig_p_mkt', 'Candidats soumis aux 6 h obligatoires / an (2 échecs pratiques)',
+       '<w_pr_pass>*(1-<w_pr_rate>)^2+<b_pr_pass>*(1-<b_pr_rate>)^2', 'candidats',
+       'Calcul : probabilité d’échouer 2 fois = (1 − taux de réussite)² → ≈ 10 000 (W) + 2 600 (B).', NUM)
+H.calc('oblig_t_mkt', 'Candidats soumis aux 12 h de théorie obligatoires / an (2 échecs théoriques)',
+       '<w_th>*<w_th_rate>*(1-<w_th_rate>)^2+<b_th>*<b_th_rate>*(1-<b_th_rate>)^2', 'candidats',
+       'Calcul : ≈ 22 300 (W) + 7 700 (B). Obligation confirmée à Bruxelles ; à vérifier pour la Wallonie (le taux de captation la pondère).', NUM)
+H.add('cap_op', 'Part captée des 6 h obligatoires (pratique)', CAPOP, '%',
+      'L’app propose les 6 h dans l’auto-école du groupe dès le 2e échec (notification, réservation immédiate) ; écoles partenaires au-delà de sa capacité.', PCT, key_flag=True)
+H.add('cap_ot', 'Part captée des 12 h obligatoires (théorie)', CAPOT, '%', 'Cours en salle dans l’auto-école du groupe.', PCT, key_flag=True)
+H.add('oblig_h', 'Heures pratiques obligatoires par candidat', 6, 'h', 'Réglementation régionale (après 2 échecs pratiques).', NUM)
+H.add('extra_h_oblig', 'Heures supplémentaires achetées en plus des 6 h', 2, 'h', 'Hypothèse : préparation du 3e passage.', NUM1)
+H.add('p_thcourse', 'Prix des 12 h de théorie obligatoires (TTC)', 180, '€', 'Prix de marché des cours théoriques en école (150-250 €).', EUR)
+H.add('comm_oblig', 'Commission AutoSchub sur ces heures', 0.20, '%', 'Même commission que les leçons (facturée à l’auto-école).', PCT)
+H.add('cac_oblig', 'Coût d’acquisition d’un candidat en échec', 6, '€', 'Faible : candidats déjà inscrits dans l’app ou ciblés après le résultat d’examen.', EUR)
+
 H.section('6. Réseau de moniteurs')
 H.add('h_per_instr', 'Heures vendues via AutoSchub / moniteur actif / mois', 45, 'h', 'Hypothèse : ~1/3 de l’activité d’un moniteur passe par l’app.', NUM)
 H.add('instr_churn', 'Attrition mensuelle des moniteurs', 0.03, '%/mois', 'Hypothèse.', PCT)
@@ -201,11 +223,11 @@ H.add('brand', 'Dépôt de marque Benelux (OBPI) + nom de domaine', 600, '€', 
 # ------------------------------------------------------------------ FINANCEMENT
 H.section('10. Financement')
 H.add('cap', 'Apport en capital des fondateurs', 30000, '€', 'Libéré à la constitution (mois 1). Pas de capital minimum en SRL, mais capitaux propres « suffisants » (art. 5:3 CSA).', EUR, key_flag=True)
-H.add('seed', 'Levée de fonds seed (business angels / tax shelter 45 %)', 300000, '€',
+H.add('seed', 'Levée de fonds seed (business angels / tax shelter 45 %)', 200000, '€',
       'Tax shelter start-up : réduction IPP de 45 % (micro-entreprise) pour l’investisseur, plafond 100 000 €/an (SPF Finances). Possible via plateforme de crowdfunding FSMA.',
       EUR, key_flag=True)
 H.add('seed_m', 'Mois de la levée seed', 9, 'mois', 'Après traction mesurable (6 mois de lancement).', NUM)
-H.add('seed2', 'Deuxième levée (seed+ / série A)', 700000, '€', 'Fonds VC belges (ex. via finance&invest.brussels, Wallonie Entreprendre co-investissement). Montant calibré sur le besoin de trésorerie.', EUR, key_flag=True)
+H.add('seed2', 'Deuxième levée (seed+ / série A)', 0, '€', 'Non nécessaire dans le scénario central ; à activer (≈ 700 000 €) si le scénario prudent se confirme ou pour accélérer (Flandre, autres permis).', EUR, key_flag=True)
 H.add('seed2_m', 'Mois de la deuxième levée', 27, 'mois', 'Après 2 ans d’historique (KPIs de rétention et de liquidité).', NUM)
 H.add('l1_amt', 'Prêt 1 — prêt subordonné régional (Wallonie Entreprendre / finance&invest.brussels)', 75000, '€',
       'Wallonie Entreprendre : prêts starter jusqu’à 100 000 € ; finance&invest.brussels : prêts proxi / subordonnés. Montant à négocier.', EUR)
@@ -267,7 +289,11 @@ A.row('h_inc_co', 'Heures incluses consommées — Conduite', '[subs_co]*<min_co
 A.row('h_inc_in', 'Heures incluses consommées — Intégral', '[subs_in]*<min_in>/60*<util>', NUM, 'sum', 'h')
 A.row('h_x_co', 'Heures supplémentaires — Conduite', '[subs_co]*<x_co>', NUM, 'sum', 'h')
 A.row('h_x_in', 'Heures supplémentaires — Intégral', '[subs_in]*<x_in>', NUM, 'sum', 'h')
-A.row('h_tot', 'Total heures de conduite réservées', '[h_alc]+[h_inc_co]+[h_inc_in]+[h_x_co]+[h_x_in]', NUM, 'sum', 'h', bold=True)
+A.section('Heures obligatoires après échec')
+A.row('ob_p', 'Candidats « 6 h obligatoires » captés', '<oblig_p_mkt>*(1+<<mkt_growth>>)^({Y}-1)/12*[season]*[ramp]*<<cap_op>>*<scen_adopt>', NUM1, 'sum', 'candidats')
+A.row('h_ob', 'Heures obligatoires + supplémentaires', '[ob_p]*(<oblig_h>+<extra_h_oblig>)', NUM, 'sum', 'h')
+A.row('ob_t', 'Candidats « 12 h de théorie » captés', '<oblig_t_mkt>*(1+<<mkt_growth>>)^({Y}-1)/12*[season]*[ramp]*<<cap_ot>>*<scen_adopt>', NUM1, 'sum', 'candidats')
+A.row('h_tot', 'Total heures de conduite réservées', '[h_alc]+[h_inc_co]+[h_inc_in]+[h_x_co]+[h_x_in]+[h_ob]', NUM, 'sum', 'h', bold=True)
 A.row('gmv', 'Volume d’affaires des leçons (valeur TTC au tarif plein)', '[h_tot]*[rate]', EUR, 'sum', '€')
 A.row('instr', 'Moniteurs actifs nécessaires', 'ROUNDUP([h_tot]/<h_per_instr>,0)', NUM, 'end', 'moniteurs')
 A.row('instr_new', 'Moniteurs à recruter / intégrer', 'MAX(0,[instr]-[instr@p]*(1-<instr_churn>))', NUM1, 'sum', 'moniteurs')
@@ -289,8 +315,10 @@ R.row('rev_in', 'Pack Intégral',
 R.row('rev_x', 'Marge sur heures supplémentaires (commission - réduction)',
       '([Activité:h_x_co]*(<comm>-<d_co>)+[Activité:h_x_in]*(<comm>-<d_in>))*[Activité:rate]/(1+<tva>)',
       note='Le moniteur est payé au prix plein (80 %) ; la réduction de l’élève est financée par la commission.')
+R.row('rev_ob', 'Commissions sur heures obligatoires après échec (pratique + théorie)',
+      '([Activité:h_ob]*[Activité:rate]+[Activité:ob_t]*<p_thcourse>*[Activité:pidx])*<comm_oblig>/(1+<tva>)')
 R.row('rev_b2b', 'Abonnements écoles partenaires (option)', '<<b2b_n>>*<b2b_fee>')
-R.row('rev_tot', 'Chiffre d’affaires total', '[rev_alc]+[rev_th]+[rev_co]+[rev_in]+[rev_x]+[rev_b2b]', total=True)
+R.row('rev_tot', 'Chiffre d’affaires total', '[rev_alc]+[rev_th]+[rev_co]+[rev_in]+[rev_x]+[rev_ob]+[rev_b2b]', total=True)
 R.section('Coûts directs HTVA')
 R.row('payout_ttc', 'Versements aux moniteurs pour heures incluses (montant versé)',
       'IF(<grid>=1,([Activité:h_inc_co]+[Activité:h_inc_in])*[Activité:rate]*(1-<comm>),0)',
@@ -298,12 +326,12 @@ R.row('payout_ttc', 'Versements aux moniteurs pour heures incluses (montant vers
 R.row('c_payout', 'Coût HTVA des heures incluses', '[payout_ttc]*<cost_factor>')
 R.row('c_payout_vat', 'dont TVA déductible sur versements (mémo)', '[payout_ttc]-[c_payout]')
 R.row('pay_vol', 'Volume encaissé via la plateforme (TTC, mémo)',
-      '[Activité:h_alc]*[Activité:rate]+([Activité:h_x_co]*(1-<d_co>)+[Activité:h_x_in]*(1-<d_in>))*[Activité:rate]'
+      '([Activité:h_alc]+[Activité:h_ob])*[Activité:rate]+[Activité:ob_t]*<p_thcourse>*[Activité:pidx]+([Activité:h_x_co]*(1-<d_co>)+[Activité:h_x_in]*(1-<d_in>))*[Activité:rate]'
       '+[Activité:subs_th]*<p_th>*[Activité:pidx]'
       '+IF(<grid>=1,[Activité:subs_co]*<p_co>*[Activité:pidx]+[Activité:subs_in]*<p_in>*[Activité:pidx],'
       '[Activité:subs_co]*(<fee_co>*[Activité:pidx]+<min_co>/60*[Activité:rate]*(1-<d_co>))+[Activité:subs_in]*(<fee_in>*[Activité:pidx]+<min_in>/60*[Activité:rate]*(1-<d_in>)))')
 R.row('pay_tx', 'Nombre de transactions (mémo)',
-      '([Activité:h_alc]+[Activité:h_x_co]+[Activité:h_x_in])/<lesson_len>+[Activité:subs_th]+[Activité:subs_co]+[Activité:subs_in]', NUM, unit='tx')
+      '([Activité:h_alc]+[Activité:h_ob]+[Activité:h_x_co]+[Activité:h_x_in])/<lesson_len>+[Activité:ob_t]+[Activité:subs_th]+[Activité:subs_co]+[Activité:subs_in]', NUM, unit='tx')
 R.row('c_fees', 'Frais de paiement (Mollie / Bancontact / SEPA)', '[pay_vol]*<fee_pct>+[pay_tx]*<fee_fix>')
 R.row('c_host', 'Infrastructure variable', '[Activité:mau]*<host_per_user>')
 R.row('c_onb', 'Acquisition & vérification des moniteurs', '[Activité:instr_new]*<onb_cost>')
@@ -346,7 +374,7 @@ P.row('hires', 'Arrivées du mois (pour matériel IT)',
 # ================================================================== CHARGES
 C = F.MonthlySheet(wb, 'Charges', 'Services et biens divers (HTVA)', 'Charges d’exploitation hors personnel et hors coûts directs.', H, START)
 C.section('Marketing')
-C.row('mkt_var', 'Acquisition élèves (CAC × inscrits)', '[Activité:new_reg]*<<cac>>*<scen_cac>')
+C.row('mkt_var', 'Acquisition élèves (CAC × inscrits + candidats en échec)', '([Activité:new_reg]*<<cac>>+([Activité:ob_p]+[Activité:ob_t])*<cac_oblig>)*<scen_cac>')
 C.row('mkt_fix', 'Marketing fixe', '<<mkt_fix>>')
 C.section('Fonctionnement')
 C.row('host', 'Hébergement & infrastructure fixe', '<<host_fix>>')
@@ -523,7 +551,7 @@ h = lambda k: H.ref(k)
 rows = [
     ('PACK CONDUITE (3 h incluses)', None, None, None),
     ('Prix payé par l’élève (TTC)', '=%s' % h('p_co'), '=%s' % h('disp_co'), ''),
-    ('Coût réel par heure incluse pour l’élève (TTC)', '=B4/(%s/60)' % h('min_co'), '=C4/(%s/60)' % h('min_co'), 'Comparer au tarif à la carte (58 €/h).'),
+    ('Coût réel par heure incluse pour l’élève (TTC)', '=B4/(%s/60)' % h('min_co'), '=C4/(%s/60)' % h('min_co'), 'Comparer au tarif à la carte (75 €/h).'),
     ('Chiffre d’affaires AutoSchub (HTVA)', '=%s/(1+%s)' % (h('p_co'), h('tva')),
      '=%s/(1+%s)+%s/60*%s*%s*(%s-%s)/(1+%s)' % (h('fee_co'), h('tva'), h('min_co'), h('util'), h('rate'), h('comm'), h('d_co'), h('tva')), ''),
     ('Coût HTVA des heures versées aux moniteurs', '=%s/60*%s*%s*(1-%s)*%s' % (h('min_co'), h('util'), h('rate'), h('comm'), h('cost_factor')), 0,
@@ -558,7 +586,7 @@ rows = [
     ('Contribution par heure', '=B28-B29', '=C28-C29', ''),
     ('Taux de contribution', '=IF(B28=0,0,B30/B28)', '=IF(C28=0,0,C30/C28)', ''),
 ]
-hdr = ['Indicateur', 'Grille 1 (actuelle)', 'Grille 2 (recommandée)', '', 'Commentaire']
+hdr = ['Indicateur', 'Grille 1 (2027)', 'Grille 2 (recommandée)', '', 'Commentaire']
 U['A2'] = None
 U['E1'] = 'Par abonné-mois (packs) ou par heure (leçons). Grille 1 = prix actuels de l’app ; grille 2 = structure recommandée.'
 U['E1'].font = F.F_SUB
@@ -588,7 +616,7 @@ U.freeze_panes = 'B3'
 S = synth_ws
 S['A1'] = 'AutoSchub — synthèse du plan financier de l’application'
 S['A1'].font = F.F_TITLE
-S['A2'] = '="Scénario "&CHOOSE(%s,"prudent","central","ambitieux")&" — grille tarifaire "&CHOOSE(%s,"actuelle de l’app","recommandée")&" — démarrage "&TEXT(MONTH(%s),"00")&"/"&YEAR(%s)' % (
+S['A2'] = '="Scénario "&CHOOSE(%s,"prudent","central","ambitieux")&" — grille tarifaire "&CHOOSE(%s,"2027 alignée auto-écoles","pack scindé recommandé")&" — démarrage "&TEXT(MONTH(%s),"00")&"/"&YEAR(%s)' % (
     H.ref('scenario'), H.ref('grid'), START, START)
 S['A2'].font = F.F_SUB
 S.column_dimensions['A'].width = 48

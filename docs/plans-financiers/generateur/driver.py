@@ -22,7 +22,7 @@ def snap(path):
     return d
 which = sys.argv[1]
 if which == 'app':
-    variants = {'p': (1, 1, 0), 'c': (2, 1, 0), 'o': (3, 1, 0), 'g2': (2, 2, 0), 'g2b': (2, 2, 1), 'act': (2, 2, 1, 0.25)}
+    variants = {'p': (1, 1, 0), 'c': (2, 1, 0), 'o': (3, 1, 0), 'leg': (2, 1, 0, 0.20, 1), 'b2b': (2, 1, 1), 'g2': (2, 2, 0)}
     script, final = 'build_app.py', OUTDIR + '/AutoSchub_Plan_financier_Application_2027-2031.xlsx'
     fargs = (2, 1, 0)
 else:
